@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanResult } from "@/types/scan";
 import { useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import SecurityScore from "@/components/SecurityScore";
@@ -8,30 +9,47 @@ import ThreatFeed from "@/components/ThreatFeed";
 import SecurityStatus from "@/components/SecurityStatus";
 import DomainScanner from "@/components/DomainScanner";
 import CyberGlobeBackground from "@/components/backgrounds/Background";
+import { scanDomain } from "@/lib/services/scanner";
 
 export default function Home() {
   const [activeTab, setActiveTab]   = useState("/");
   const [loading, setLoading]       = useState(false);
   const [isFocusMode, setFocusMode] = useState(false);
 
-  const [scanResult, setScanResult] = useState<any>({
-    ip: "192.168.1.105",
-    score: 87,
-    headers: { csp: true, hsts: true, xFrameOptions: false },
-  });
+  const [scanResult, setScanResult] = useState<ScanResult>({
+  domain: "",
 
-  const handleScan = (domain: string) => {
-    if (!domain) return;
+  ip: "192.168.1.105",
+
+  ssl: {
+    valid: true,
+  },
+
+  headers: {
+    score: 7,
+    csp: true,
+    hsts: true,
+    xFrameOptions: false,
+  },
+
+  score: 87,
+});
+
+const handleScan = async (domain: string) => {
+  if (!domain) return;
+
+  try {
     setLoading(true);
-    setTimeout(() => {
-      setScanResult({
-        ip: "104.26.10.228",
-        score: 94,
-        headers: { csp: true, hsts: true, xFrameOptions: true },
-      });
-      setLoading(false);
-    }, 2500);
-  };
+
+    const result = await scanDomain(domain);
+
+    setScanResult(result);
+  } catch (error) {
+    console.error("Scan failed:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <main className="min-h-screen text-white antialiased relative overflow-hidden bg-[#050507]">
@@ -76,10 +94,10 @@ export default function Home() {
               <StatsCards data={scanResult} isLoading={loading} />
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div className="xl:col-span-2 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <SecurityScore score={scanResult?.score} isLoading={loading} />
-                    <SecurityStatus headers={scanResult?.headers} isLoading={loading} />
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <SecurityScore score={scanResult.score} isLoading={loading} />
+                    <SecurityStatus headers={scanResult.headers} isLoading={loading} />
+                </div>
                   <div
                     onClick={() => setActiveTab("/analytics")}
                     className="p-8 bg-zinc-950/20 border border-zinc-800/40 rounded-lg backdrop-blur-md cursor-pointer group hover:border-cyan-500/30 transition-all"

@@ -214,7 +214,7 @@ function buildContinentXYZ(): [number,number,number][][][] {
 
 function buildDots(): [number, number, number][] {
   const dots: [number, number, number][] = [];
-  for (let i = 0; i < 2200; i++) {
+  for (let i = 0; i < 1000; i++) {
     const lat = Math.random() * 180 - 90;
     const lon = Math.random() * 360 - 180;
     const φ = lat * Math.PI / 180;
@@ -572,7 +572,7 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
             ctx.arc(tp.sx, tp.sy, 3+focusT*2, 0, Math.PI*2);
             ctx.fillStyle   = arc.color;
             ctx.shadowColor = arc.color;
-            ctx.shadowBlur  = 14;
+            ctx.shadowBlur  = 4;
             ctx.fill();
             ctx.shadowBlur  = 0;
           }
