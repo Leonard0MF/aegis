@@ -1,108 +1,142 @@
 "use client";
 
 import type { ScanResult } from "@/types/scan";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Globe2, X } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import SecurityScore from "@/components/SecurityScore";
 import StatsCards from "@/components/StatsCards";
 import ThreatFeed from "@/components/ThreatFeed";
 import SecurityStatus from "@/components/SecurityStatus";
 import DomainScanner from "@/components/DomainScanner";
+import ScanDetails from "@/components/ScanDetails";
 import CyberGlobeBackground from "@/components/backgrounds/Background";
 import { scanDomain } from "@/lib/services/scanner";
+import { getLastScan, saveScan } from "@/lib/storage/scanHistory";
+
+/** Alvo usado quando o AEGIS roda em localhost/IP e não há domínio próprio para se auto-diagnosticar. */
+const FALLBACK_TARGET = process.env.NEXT_PUBLIC_AEGIS_DEFAULT_TARGET || "github.com";
+
+/** Domínio onde o AEGIS está hospedado, ou null se for localhost / IP / host interno. */
+function selfDomain(): string | null {
+  const host = window.location.hostname;
+  if (!host.includes(".") || /^[\d.]+$/.test(host) || host.includes(":") || /\.(local|localhost)$/.test(host)) {
+    return null;
+  }
+  return host;
+}
 
 export default function Home() {
   const [loading, setLoading]       = useState(false);
   const [isFocusMode, setFocusMode] = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [isSelfScan, setIsSelfScan] = useState(false);
+  const booted = useRef(false);
 
-  const handleScan = async (domain: string) => {
+  const runScan = useCallback(async (domain: string, self = false) => {
     if (!domain) return;
-
     setLoading(true);
     setError(null);
     try {
       const result = await scanDomain(domain);
       setScanResult(result);
+      setIsSelfScan(self);
+      saveScan(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Scan failed");
+      setError(err instanceof Error ? err.message : "Falha no scan");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Ao abrir: mostra o último scan salvo; sem histórico, faz o auto-diagnóstico do próprio domínio.
+  useEffect(() => {
+    if (booted.current) return;
+    booted.current = true;
+    const last = getLastScan();
+    if (last) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- leitura única de storage externo
+      setScanResult(last);
+      return;
+    }
+    const self = selfDomain();
+    void runScan(self ?? FALLBACK_TARGET, self !== null);
+  }, [runScan]);
 
   return (
-    <main className="min-h-screen text-white antialiased relative overflow-hidden bg-[#050507]">
-
-      {/* Globo: sempre atrás */}
+    <main className="min-h-screen relative overflow-hidden bg-canvas">
       <CyberGlobeBackground isFocusMode={isFocusMode} />
 
-      {/* HUD: no focus mode deixa os cliques passarem para o globo (drag) */}
-      <div
-        className={`flex flex-col lg:flex-row h-screen relative z-10 ${
-          isFocusMode ? "pointer-events-none" : ""
-        }`}
-      >
-
+      {/* No modo globo, os cliques passam para o canvas (arrastar) */}
+      <div className={`flex flex-col lg:flex-row h-screen relative z-10 ${isFocusMode ? "pointer-events-none" : ""}`}>
         {!isFocusMode && <Sidebar />}
 
-        <section className="flex-1 min-h-0 p-4 md:p-8 overflow-hidden relative flex flex-col">
-
-          {/* Header */}
-          <div className="pointer-events-auto flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-zinc-800/30 pb-6 mb-8">
-            <div>
-              <h2 className="text-xl font-mono font-black tracking-widest text-zinc-100 uppercase">
-                {isFocusMode ? "// GLOBAL_MATRIX" : "// AEGIS_CORE"}
-              </h2>
-              <p className="text-cyan-400 text-[10px] font-mono uppercase tracking-wider animate-pulse mt-0.5">
-                SYS_STATUS: ACTIVE {"//"} MODE: {isFocusMode ? "FOCUS_STREAM" : "MONITORING"}
+        <section className="flex-1 min-h-0 flex flex-col px-4 py-5 md:px-8 md:py-6 overflow-hidden">
+          <header className="pointer-events-auto flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold tracking-tight text-fg">
+                {isFocusMode ? "Mapa global" : "Visão geral"}
+              </h1>
+              <p className="text-sm text-muted mt-0.5 truncate">
+                {error ? (
+                  <span role="alert" className="text-bad">Erro: {error}</span>
+                ) : loading ? (
+                  "Escaneando…"
+                ) : scanResult ? (
+                  <>
+                    <span className="text-fg">{scanResult.domain}</span>
+                    {isSelfScan && (
+                      <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] text-accent ring-1 ring-inset ring-accent/20">
+                        auto-diagnóstico
+                      </span>
+                    )}
+                    <span className="text-dim"> · {new Date(scanResult.scannedAt).toLocaleString("pt-BR")}</span>
+                  </>
+                ) : (
+                  "Nenhum scan ainda"
+                )}
               </p>
-              {scanResult && !error && (
-                <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider mt-1">
-                  TARGET: {scanResult.domain}
-                </p>
-              )}
-              {error && (
-                <p role="alert" className="text-rose-500 text-[10px] font-mono uppercase tracking-wider mt-1">
-                  ERR: {error}
-                </p>
-              )}
             </div>
 
-            <div className="flex items-center gap-4 w-full md:w-auto">
-              <div className="flex-1 md:w-96">
-                <DomainScanner onScan={handleScan} isLoading={loading} />
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <div className="flex-1 md:w-[26rem]">
+                <DomainScanner
+                  key={scanResult?.domain ?? "empty"}
+                  initialValue={scanResult?.domain ?? ""}
+                  onScan={(d) => runScan(d)}
+                  isLoading={loading}
+                />
               </div>
               <button
                 type="button"
-                onClick={() => setFocusMode(f => !f)}
-                className="font-mono text-[9px] border border-cyan-500/30 bg-zinc-950/80 px-4 py-2 hover:bg-cyan-500/10 text-cyan-400 transition-all uppercase tracking-widest whitespace-nowrap"
+                onClick={() => setFocusMode((f) => !f)}
+                className="inline-flex items-center gap-2 rounded-xl border border-line bg-panel/90 px-3.5 py-2.5 text-sm text-muted hover:text-fg hover:border-line-strong transition-colors whitespace-nowrap"
               >
-                {isFocusMode ? "[ EXIT_FOCUS ]" : "[ FOCUS_MODE ]"}
+                {isFocusMode ? <X size={16} /> : <Globe2 size={16} />}
+                {isFocusMode ? "Fechar mapa" : "Mapa"}
               </button>
             </div>
-          </div>
+          </header>
 
-          {/* Content */}
           {!isFocusMode ? (
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-6 animate-fadeIn">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-4 -mr-2 pr-2 animate-fade-in">
               <StatsCards data={scanResult ?? undefined} isLoading={loading} />
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 content-start">
-                  <SecurityScore score={scanResult?.score} isLoading={loading} />
-                  <SecurityStatus headers={scanResult?.headers} isLoading={loading} />
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div className="xl:col-span-2 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                    <SecurityScore score={scanResult?.score} grade={scanResult?.grade} isLoading={loading} />
+                    <SecurityStatus checks={scanResult?.checks} isLoading={loading} />
+                  </div>
+                  <ScanDetails data={scanResult ?? undefined} isLoading={loading} />
                 </div>
-                <div className="xl:col-span-1">
-                  <ThreatFeed isLoading={loading} />
-                </div>
+                <ThreatFeed isLoading={loading} className="max-h-[720px]" />
               </div>
             </div>
           ) : (
-            /* Focus mode: feed no canto, globo visível e arrastável atrás */
-            <div className="flex-1 min-h-0 flex items-end justify-end p-4 animate-fadeIn">
-              <div className="pointer-events-auto w-full max-w-md h-[440px]">
-                <ThreatFeed isLoading={loading} />
+            <div className="flex-1 min-h-0 flex items-end justify-end animate-fade-in">
+              <div className="pointer-events-auto w-full max-w-sm h-[420px]">
+                <ThreatFeed isLoading={false} className="h-full" />
               </div>
             </div>
           )}

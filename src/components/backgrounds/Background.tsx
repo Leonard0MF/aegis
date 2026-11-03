@@ -123,7 +123,13 @@ const CONTINENTS: [number, number][][][] = [
   ],
 ];
 
-const COLORS_GLOW = ["#FF0055", "#00FF66", "#00F0FF", "#FFB800"];
+// Paleta "controle de missão" (mesmos valores dos tokens em globals.css)
+const ARC_KINDS = [
+  { level: "critical", color: "#F07167" },
+  { level: "success",  color: "#3DD6C0" },
+  { level: "info",     color: "#7FA7CF" },
+  { level: "warning",  color: "#F2B84B" },
+] as const;
 
 function ll2xyz(lat: number, lon: number, r: number): [number, number, number] {
   const phi   = (90 - lat) * Math.PI / 180;
@@ -355,7 +361,7 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
       let   bi = Math.floor(Math.random() * HUBS.length);
       while (bi === ai) bi = Math.floor(Math.random() * HUBS.length);
       const a = HUBS[ai], b = HUBS[bi];
-      const color = COLORS_GLOW[Math.floor(Math.random()*COLORS_GLOW.length)];
+      const { level, color } = ARC_KINDS[Math.floor(Math.random()*ARC_KINDS.length)];
       arcs.push({
         pts: interpolateArc(a.lat, a.lon, b.lat, b.lon, 60),
         color,
@@ -363,7 +369,7 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
         alpha: 1,
       });
       window.dispatchEvent(new CustomEvent("aegis_attack", {
-        detail: { origin: a.name, target: b.name, color },
+        detail: { origin: a.name, target: b.name, level },
       }));
     }
 
@@ -400,10 +406,10 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
             ctx.lineTo(seg[i].sx, seg[i].sy);
           }
 
-          ctx.fillStyle = `rgba(6,182,212,${(contAlpha * 0.15).toFixed(3)})`;
+          ctx.fillStyle = `rgba(61,214,192,${(contAlpha * 0.10).toFixed(3)})`;
           ctx.fill();
           
-          ctx.strokeStyle = `rgba(6,182,212,${(contAlpha * 0.85).toFixed(3)})`;
+          ctx.strokeStyle = `rgba(61,214,192,${(contAlpha * 0.70).toFixed(3)})`;
           ctx.lineWidth   = 1.2 + focusT * 0.8;
           ctx.stroke();
         }
@@ -439,25 +445,25 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
       const R  = Math.min(W, H) * (0.22 + focusT * 0.2);
 
       // Background
-      ctx.fillStyle = "#050507";
+      ctx.fillStyle = "#0b1622";
       ctx.fillRect(0, 0, W, H);
 
       // Halo glow
       const g = ctx.createRadialGradient(cx, cy, R*0.1, cx, cy, R*1.7);
-      g.addColorStop(0,   `rgba(6,182,212,${(0.06+focusT*0.12).toFixed(3)})`);
-      g.addColorStop(0.5, `rgba(6,182,212,${(0.02+focusT*0.04).toFixed(3)})`);
-      g.addColorStop(1,   "rgba(6,182,212,0)");
+      g.addColorStop(0,   `rgba(61,214,192,${(0.05+focusT*0.08).toFixed(3)})`);
+      g.addColorStop(0.5, `rgba(127,167,207,${(0.02+focusT*0.03).toFixed(3)})`);
+      g.addColorStop(1,   "rgba(127,167,207,0)");
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
 
       // Ocean sphere
       ctx.beginPath();
       ctx.arc(cx, cy, R, 0, Math.PI*2);
-      ctx.fillStyle = "rgba(3,20,35,0.88)";
+      ctx.fillStyle = "rgba(15,31,46,0.92)";
       ctx.fill();
 
       // Ocean grid
-      ctx.strokeStyle = "rgba(6,182,212,0.05)";
+      ctx.strokeStyle = "rgba(127,167,207,0.07)";
       ctx.lineWidth   = 0.6;
       
       ctx.beginPath();
@@ -496,7 +502,7 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
             ctx.moveTo(p.sx + size, p.sy);
             ctx.arc(p.sx, p.sy, size, 0, Math.PI*2);
           }
-          ctx.fillStyle = `rgba(6,182,212,${((0.12 + mid*0.35) * dotOpacity).toFixed(2)})`;
+          ctx.fillStyle = `rgba(127,167,207,${((0.12 + mid*0.35) * dotOpacity).toFixed(2)})`;
           ctx.fill();
         }
       }
@@ -514,23 +520,23 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
           
           ctx.beginPath();
           ctx.arc(p.sx, p.sy, 5+pulse*6, 0, Math.PI*2);
-          ctx.strokeStyle = `rgba(0,240,255,${((0.12+pulse*0.18)*hubAlpha).toFixed(2)})`;
+          ctx.strokeStyle = `rgba(61,214,192,${((0.12+pulse*0.18)*hubAlpha).toFixed(2)})`;
           ctx.lineWidth = 1.2;
           ctx.stroke();
           
           // glow barato: círculo maior translúcido em vez de shadowBlur
           ctx.beginPath();
           ctx.arc(p.sx, p.sy, 6, 0, Math.PI*2);
-          ctx.fillStyle = `rgba(0,240,255,${(0.2*hubAlpha).toFixed(2)})`;
+          ctx.fillStyle = `rgba(61,214,192,${(0.2*hubAlpha).toFixed(2)})`;
           ctx.fill();
           ctx.beginPath();
           ctx.arc(p.sx, p.sy, 3, 0, Math.PI*2);
-          ctx.fillStyle = `rgba(0,240,255,${hubAlpha.toFixed(2)})`;
+          ctx.fillStyle = `rgba(61,214,192,${hubAlpha.toFixed(2)})`;
           ctx.fill();
           
           if (hubAlpha > 0.3) {
-            ctx.font      = `bold ${Math.round(9+focusT*2.5)}px monospace`;
-            ctx.fillStyle = `rgba(0,240,255,${(hubAlpha*0.9).toFixed(2)})`;
+            ctx.font      = `500 ${Math.round(10+focusT*2)}px ui-sans-serif, system-ui, sans-serif`;
+            ctx.fillStyle = `rgba(61,214,192,${(hubAlpha*0.9).toFixed(2)})`;
             ctx.fillText(hub.name, p.sx+8, p.sy-6);
           }
         }
@@ -597,9 +603,9 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
 
       // Focus mode hint
       if (focus) {
-        ctx.font      = "11px monospace";
-        ctx.fillStyle = "rgba(6,182,212,0.3)";
-        ctx.fillText("// DRAG TO ROTATE", 16, H - 16);
+        ctx.font      = "12px ui-sans-serif, system-ui, sans-serif";
+        ctx.fillStyle = "rgba(141,164,184,0.6)";
+        ctx.fillText("Arraste para girar o globo", 24, H - 24);
       }
 
     }
@@ -626,7 +632,7 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
         position: "fixed",
         inset: 0,
         zIndex: 0,
-        backgroundColor: "#050507",
+        backgroundColor: "#0b1622",
         pointerEvents: "none",
       }}
     >

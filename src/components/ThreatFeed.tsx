@@ -1,204 +1,102 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Panel from "@/components/ui/Panel";
 
-type ThreatLevel = "info" | "warning" | "critical" | "success";
+export type ThreatLevel = "info" | "warning" | "critical" | "success";
 
 type ThreatEvent = {
   id: string;
   type: ThreatLevel;
-  message: string;
+  origin: string;
+  target: string;
   time: string;
 };
 
 interface ThreatFeedProps {
   isLoading: boolean;
+  className?: string;
 }
 
-const levelStyle = (type: ThreatLevel) => {
-  switch (type) {
-    case "info":
-      return {
-        text: "text-cyan-400/90",
-        bg: "bg-cyan-400",
-        border: "border-cyan-500/10",
-      };
-
-    case "warning":
-      return {
-        text: "text-amber-400/90",
-        bg: "bg-amber-400",
-        border: "border-amber-500/10",
-      };
-
-    case "critical":
-      return {
-        text: "text-rose-500 font-bold",
-        bg: "bg-rose-500",
-        border: "border-rose-500/20 bg-rose-500/[0.02]",
-      };
-
-    case "success":
-      return {
-        text: "text-emerald-400/90",
-        bg: "bg-emerald-400",
-        border: "border-emerald-500/10",
-      };
-  }
+const LEVEL: Record<ThreatLevel, { label: string; dot: string; text: string }> = {
+  critical: { label: "Crítico", dot: "bg-bad", text: "text-bad" },
+  warning: { label: "Suspeito", dot: "bg-warn", text: "text-warn" },
+  success: { label: "Bloqueado", dot: "bg-ok", text: "text-ok" },
+  info: { label: "Observado", dot: "bg-info", text: "text-info" },
 };
 
-const initialFeed: ThreatEvent[] = [
-  {
-    type: "critical",
-    message: "OPEN_SSH_PORT_DETECTED // PORT_22",
-    time: "16:31:42",
-    id: "seed-0",
-  },
-  {
-    type: "warning",
-    message: "MISSING_CSP_SECURITY_HEADER",
-    time: "16:30:15",
-    id: "seed-1",
-  },
-  {
-    type: "success",
-    message: "SSL_CERTIFICATE_VALID_TLS_1.3",
-    time: "16:28:59",
-    id: "seed-2",
-  },
-  {
-    type: "warning",
-    message: "OUTDATED_TLS_CONFIGURATION_V1.1",
-    time: "16:25:04",
-    id: "seed-3",
-  },
-  {
-    type: "info",
-    message: "TARGET_ASSET_RECON_COMPLETED",
-    time: "16:22:11",
-    id: "seed-4",
-  },
-];
+const MAX_EVENTS = 20;
 
 // Contador local: crypto.randomUUID() não existe fora de contexto seguro (http via IP)
 let eventSeq = 0;
 
-const mapColorToLevel = (color?: string): ThreatLevel => {
-  if (color === "#FF0055") return "critical";
-  if (color === "#FFB800") return "warning";
-  if (color === "#00FF66") return "success";
-  return "info";
-};
-
-export default function ThreatFeed({
-  isLoading,
-}: ThreatFeedProps) {
-  const [feed, setFeed] =
-    useState<ThreatEvent[]>(initialFeed);
+/**
+ * Feed alimentado pelos eventos "aegis_attack" do globo.
+ * IMPORTANTE: os eventos são simulados (visualização), não vêm de uma fonte real de ameaças.
+ */
+export default function ThreatFeed({ isLoading, className = "" }: ThreatFeedProps) {
+  const [feed, setFeed] = useState<ThreatEvent[]>([]);
 
   useEffect(() => {
-    const handleNewAttack = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (!detail?.origin || !detail?.target) return;
-
-      const now = new Date();
-      const timeStr = now
-        .toTimeString()
-        .split(" ")[0];
-
-      const threatType = mapColorToLevel(
-        detail?.color
-      );
-
-      const newEvent: ThreatEvent = {
+    const onAttack = (e: Event) => {
+      const d = (e as CustomEvent<{ origin?: string; target?: string; level?: ThreatLevel }>).detail;
+      if (!d?.origin || !d?.target) return;
+      const event: ThreatEvent = {
         id: `evt-${++eventSeq}`,
-        type: threatType,
-        message: `INTERCEPT_PACKET // ORIGIN: ${detail.origin.toUpperCase()} -> TARGET: ${detail.target.toUpperCase()}`,
-        time: timeStr,
+        type: d.level ?? "info",
+        origin: d.origin,
+        target: d.target,
+        time: new Date().toTimeString().slice(0, 8),
       };
-
-      setFeed((prev) => [
-        newEvent,
-        ...prev.slice(0, 19),
-      ]);
+      setFeed((prev) => [event, ...prev.slice(0, MAX_EVENTS - 1)]);
     };
-
-    window.addEventListener(
-      "aegis_attack",
-      handleNewAttack
-    );
-
-    return () => {
-      window.removeEventListener(
-        "aegis_attack",
-        handleNewAttack
-      );
-    };
+    window.addEventListener("aegis_attack", onAttack);
+    return () => window.removeEventListener("aegis_attack", onAttack);
   }, []);
 
   return (
-    <div className="p-6 bg-zinc-950/80 border border-zinc-800/60 rounded-lg relative overflow-hidden h-full flex flex-col min-h-[440px]">
-
-      <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-zinc-800"></div>
-      <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-zinc-800"></div>
-      <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-zinc-800"></div>
-      <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-zinc-800"></div>
-
-      <div className="border-b border-zinc-900 pb-2 mb-4 flex items-center justify-between">
-        <h3 className="text-[10px] font-mono font-black tracking-widest text-zinc-500 uppercase">
-          {"// LIVE_THREAT_FEED"}
-        </h3>
-
-        <div className="w-2 h-2 rounded-full bg-emerald-500" />
-      </div>
-
-      <div className="space-y-2 flex-1 overflow-y-auto max-h-[340px] pr-1">
-        {isLoading ? (
-          Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className="font-mono text-[10px] text-zinc-700 uppercase tracking-wider"
-            >
-              &gt; BUFFERING_STREAM_NODE_{i}
-            </div>
-          ))
-        ) : (
-          feed.map((event) => {
-            const style = levelStyle(event.type);
-
+    <Panel
+      title="Tráfego global"
+      subtitle="Simulação visual · não é um feed real de ameaças"
+      actions={
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-ok">
+          <span className="h-1.5 w-1.5 rounded-full bg-ok" />
+          ao vivo
+        </span>
+      }
+      className={`min-h-[440px] ${className}`}
+      bodyClassName="overflow-y-auto"
+    >
+      {isLoading && feed.length === 0 ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-11 rounded-lg bg-panel-2 animate-pulse" />
+          ))}
+        </div>
+      ) : feed.length === 0 ? (
+        <p className="text-sm text-dim py-10 text-center">Aguardando eventos…</p>
+      ) : (
+        <ul className="space-y-1">
+          {feed.map((ev) => {
+            const l = LEVEL[ev.type];
             return (
-              <div
-                key={event.id}
-                className={`p-2 border rounded font-mono text-[10px] tracking-wide flex items-start gap-2 ${style.border}`}
+              <li
+                key={ev.id}
+                className="flex items-center gap-3 rounded-lg px-2.5 py-2 hover:bg-panel-2/60 transition-colors animate-fade-in"
               >
-                <div
-                  className={`w-1.5 h-1.5 rounded-full mt-1 ${style.bg}`}
-                />
-
-                <div className="flex-1">
-                  <span className="text-zinc-600 mr-2">
-                    [{event.time}]
-                  </span>
-
-                  <span className={style.text}>
-                    {event.message}
-                  </span>
+                <span className={`h-2 w-2 shrink-0 rounded-full ${l.dot}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] text-fg truncate">
+                    {ev.origin} <span className="text-dim">→</span> {ev.target}
+                  </p>
+                  <p className={`text-[11px] ${l.text}`}>{l.label}</p>
                 </div>
-              </div>
+                <span className="font-mono text-[11px] text-dim tabular-nums">{ev.time}</span>
+              </li>
             );
-          })
-        )}
-      </div>
-
-      <div className="text-[8px] font-mono text-zinc-600 mt-4 tracking-widest uppercase border-t border-zinc-900/60 pt-2 flex justify-between">
-        <span>
-          FEED_SOURCE: SHODAN_NODE_MATRIX
-        </span>
-
-        <span>
-          REC_COUNT: {feed.length}
-        </span>
-      </div>
-    </div>
+          })}
+        </ul>
+      )}
+    </Panel>
   );
-} 
+}

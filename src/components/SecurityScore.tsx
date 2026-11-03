@@ -1,105 +1,65 @@
 "use client";
 
+import type { Grade } from "@/types/scan";
+import Panel from "@/components/ui/Panel";
+
 interface SecurityScoreProps {
   score?: number;
+  grade?: Grade;
   isLoading: boolean;
 }
 
-export default function SecurityScore({ score, isLoading }: SecurityScoreProps) {
-  const hasScore = score != null;
-  const activeScore = score ?? 0;
-  
-  const isExcellent = activeScore >= 80;
-  const isModerate = activeScore >= 50;
+const R = 52;
+const CIRC = 2 * Math.PI * R;
 
-  const label = !hasScore
-    ? "AWAITING_TARGET_SCAN"
-    : isExcellent
-    ? "EXCELLENT_SECURITY_POSTURE"
-    : isModerate
-    ? "MODERATE_SECURITY_POSTURE"
-    : "WEAK_SECURITY_POSTURE";
+function tier(score: number) {
+  if (score >= 80) return { label: "Postura excelente", color: "var(--color-ok)", text: "text-ok" };
+  if (score >= 50) return { label: "Postura moderada", color: "var(--color-warn)", text: "text-warn" };
+  return { label: "Postura fraca", color: "var(--color-bad)", text: "text-bad" };
+}
 
-  // Gerenciamento de cores dinâmicas com base na severidade (Neon Matrix / Cybersec)
-  const statusColor = !hasScore
-    ? "text-zinc-500"
-    : isExcellent
-    ? "text-emerald-400 border-emerald-500/30 shadow-emerald-500/10"
-    : isModerate
-    ? "text-amber-400 border-amber-500/30 shadow-amber-500/10"
-    : "text-rose-500 border-rose-500/30 shadow-rose-500/10";
-
-  const ringColor = !hasScore
-    ? "border-zinc-800"
-    : isExcellent
-    ? "border-emerald-500"
-    : isModerate
-    ? "border-amber-400"
-    : "border-rose-500";
+export default function SecurityScore({ score, grade, isLoading }: SecurityScoreProps) {
+  const hasScore = score != null && !isLoading;
+  const t = hasScore ? tier(score) : null;
+  const offset = hasScore ? CIRC * (1 - score / 100) : CIRC;
 
   return (
-    <div className={`p-6 bg-zinc-950/80 border border-zinc-800/60 rounded-lg relative overflow-hidden flex items-center justify-between min-h-[190px] transition-all duration-500 ${!isLoading && hasScore ? `shadow-[0_0_25px_rgba(0,0,0,0.5)]` : ""}`}>
-      
-      {/* Cantoneiras HUD Estilo Mira Militar */}
-      <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-zinc-800"></div>
-      <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-zinc-800"></div>
-      <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-zinc-800"></div>
-      <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-zinc-800"></div>
-
-      {isLoading ? (
-        /* ================= ESTADO CARREGANDO ================= */
-        <div className="flex-1 flex items-center justify-between animate-pulse">
-          <div className="space-y-3 font-mono">
-            <h3 className="text-[10px] font-black tracking-widest text-zinc-600 uppercase">{"// CALC_INTELLIGENCE_METRIC"}</h3>
-            <div className="text-2xl font-black text-cyan-500/60 tracking-tighter">COMPUTING_IDX...</div>
-            <div className="text-[9px] text-zinc-500 tracking-wider">RUNNING WEIGHT MATRIX V.16</div>
-          </div>
-          
-          {/* Anel de radar rotacionando em loading */}
-          <div className="h-28 w-28 rounded-full border-2 border-dashed border-cyan-500/30 animate-[spin_10s_infinite_linear] flex items-center justify-center">
-            <div className="h-20 w-20 rounded-full border border-zinc-800 flex items-center justify-center">
-              <span className="text-[9px] font-mono text-cyan-400/50 uppercase tracking-widest">CALC</span>
-            </div>
+    <Panel title="Pontuação de segurança" subtitle="Média ponderada de todos os checks">
+      <div className="flex items-center gap-6 pt-2">
+        <div className="relative h-32 w-32 shrink-0">
+          <svg viewBox="0 0 120 120" className={`h-full w-full -rotate-90 ${isLoading ? "animate-spin [animation-duration:2.5s]" : ""}`}>
+            <circle cx="60" cy="60" r={R} fill="none" stroke="var(--color-line)" strokeWidth="8" />
+            <circle
+              cx="60"
+              cy="60"
+              r={R}
+              fill="none"
+              stroke={isLoading ? "var(--color-accent)" : t?.color ?? "transparent"}
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeDasharray={CIRC}
+              strokeDashoffset={isLoading ? CIRC * 0.75 : offset}
+              style={{ transition: "stroke-dashoffset 900ms cubic-bezier(.2,.8,.2,1)" }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className={`text-4xl font-semibold tracking-tight ${t?.text ?? "text-dim"}`}>
+              {hasScore ? grade ?? "–" : "–"}
+            </span>
+            <span className="text-[11px] text-dim">nota</span>
           </div>
         </div>
-      ) : (
-        /* ================= ESTADO COMPLETO / DADOS ATIVOS ================= */
-        <>
-          <div className="font-mono flex flex-col justify-between h-full py-1">
-            <div>
-              <h3 className="text-[10px] font-black tracking-widest text-zinc-500 uppercase">
-                {"// SECURITY_INTEGRITY_SCORE"}
-              </h3>
-              <p className="text-5xl font-black tracking-tighter text-zinc-100 mt-2">
-                {hasScore ? activeScore : "--"}
-                <span className="text-zinc-700 text-xs tracking-widest font-normal ml-1">_PTS</span>
-              </p>
-            </div>
 
-            <p className={`text-[10px] font-bold tracking-wider uppercase mt-4 flex items-center gap-1.5 ${statusColor.split(" ")[0]}`}>
-              <span className="inline-block w-1.5 h-1.5 bg-current rounded-full animate-pulse"></span>
-              {label}
-            </p>
-          </div>
-
-          {/* Gráfico do Anel Holográfico de Proteção */}
-          <div className={`h-28 w-28 rounded-full border-[6px] border-zinc-900 ${ringColor} flex items-center justify-center relative shadow-[inset_0_0_15px_rgba(0,0,0,0.6)] group transition-all duration-500`}>
-            
-            {/* Linha externa cirúrgica fina decorativa */}
-            <div className="absolute -inset-[10px] rounded-full border border-zinc-800/40 border-dashed scale-95 group-hover:scale-100 transition-transform duration-700"></div>
-
-            <div className="text-center font-mono">
-              <span className="text-xl font-black tracking-tighter text-zinc-100 block">
-                {hasScore ? `${activeScore}%` : "--"}
-              </span>
-              <span className="text-[8px] text-zinc-600 tracking-widest uppercase block -mt-0.5">
-                RATING
-              </span>
-            </div>
-          </div>
-        </>
-      )}
-
-    </div>
+        <div className="min-w-0">
+          <p className="font-mono text-5xl font-medium tracking-tight tabular-nums text-fg">
+            {hasScore ? score : isLoading ? "…" : "–"}
+            <span className="text-base text-dim font-sans font-normal ml-1">/100</span>
+          </p>
+          <p className={`mt-2 text-sm ${t?.text ?? "text-muted"}`}>
+            {isLoading ? "Calculando…" : t?.label ?? "Aguardando o primeiro scan"}
+          </p>
+        </div>
+      </div>
+    </Panel>
   );
 }

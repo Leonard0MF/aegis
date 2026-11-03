@@ -1,37 +1,71 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/*
+ * AEGIS — "Controle de missão"
+ * Azul-petróleo profundo, painéis suaves, acentos verde-água (ok) e âmbar (atenção).
+ * Use sempre os tokens abaixo (bg-panel, text-muted, border-line, text-ok…) em vez de cores soltas.
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --animate-fadeIn: fadeIn 0.3s ease-out both;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+/* static: as variáveis sempre existem em :root (usadas também via var() no SVG/canvas) */
+@theme static {
+  --color-canvas: #0b1622;
+  --color-panel: #0f1f2e;
+  --color-panel-2: #142839;
+  --color-line: #1c3346;
+  --color-line-strong: #29475f;
+
+  --color-fg: #e6edf3;
+  --color-muted: #8da4b8;
+  --color-dim: #5d768b;
+
+  --color-accent: #3dd6c0;
+  --color-ok: #3dd6c0;
+  --color-warn: #f2b84b;
+  --color-bad: #f07167;
+  --color-info: #7fa7cf;
+
+  --animate-fade-in: fade-in 0.35s ease-out both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes loading {
+@keyframes progress {
   from { transform: translateX(-100%); }
-  to   { transform: translateX(100%); }
+  to   { transform: translateX(250%); }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-fg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+}
+
+/* Scrollbar discreta, combinando com os painéis */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-accent) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

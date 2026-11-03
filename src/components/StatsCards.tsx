@@ -1,84 +1,78 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
+import { AlertTriangle, Server, ShieldCheck } from "lucide-react";
+import type { ScanResult } from "@/types/scan";
+
 interface StatsCardsProps {
-  data?: {
-    ip?: string;
-    headers?: {
-      csp: boolean;
-      hsts: boolean;
-      xFrameOptions: boolean;
-    };
-  };
+  data?: ScanResult;
   isLoading: boolean;
 }
 
-export default function StatsCards({ data, isLoading }: StatsCardsProps) {
-  // Calcula quantos cabeçalhos de segurança reais foram validados
-  // (conta só os headers booleanos — o campo numérico "score" não entra)
-  const detectedHeadersCount = data?.headers
-    ? [data.headers.csp, data.headers.hsts, data.headers.xFrameOptions].filter(Boolean).length
-    : 0;
+type Tone = "neutral" | "ok" | "warn" | "bad";
 
-  // Estrutura os cards dinamicamente com base no estado do sistema
-  const stats = [
+const TONE: Record<Tone, { text: string; icon: string }> = {
+  neutral: { text: "text-fg", icon: "text-info bg-info/10" },
+  ok: { text: "text-ok", icon: "text-ok bg-ok/10" },
+  warn: { text: "text-warn", icon: "text-warn bg-warn/10" },
+  bad: { text: "text-bad", icon: "text-bad bg-bad/10" },
+};
+
+export default function StatsCards({ data, isLoading }: StatsCardsProps) {
+  const fails = data?.checks.filter((c) => c.status === "fail").length ?? 0;
+  const warns = data?.checks.filter((c) => c.status === "warn").length ?? 0;
+  const tls = data?.tls;
+
+  const stats: { title: string; value: string; unit?: string; sub: string; tone: Tone; icon: LucideIcon }[] = [
     {
-      title: "ACTIVE_ALERTS_DAEMON",
-      value: isLoading ? "SCANNING" : data ? (detectedHeadersCount < 3 ? "01" : "00") : "03",
-      subtext: isLoading ? "INSPECTING..." : data ? "VULN_INDEX_EVALUATED" : "ELEVATED_ACTIVITY_WARN",
-      isAlert: !isLoading && !data, // Fica vermelho no estado inicial simulado
+      title: "Problemas abertos",
+      value: data ? String(fails + warns) : "–",
+      sub: data ? `${fails} falhas · ${warns} atenção` : "Sem dados",
+      tone: !data ? "neutral" : fails > 0 ? "bad" : warns > 0 ? "warn" : "ok",
+      icon: AlertTriangle,
     },
     {
-      title: "MONITORED_NODES_INDEX",
-      value: isLoading ? "FETCHING" : data ? "01" : "12",
-      subtext: isLoading ? "RESOLVING_IP..." : data ? `IP: ${data.ip || "UNKNOWN"}` : "NET_ASSETS_ONLINE",
-      isAlert: false,
+      title: "Certificado",
+      value: !data ? "–" : tls ? String(tls.daysRemaining) : "—",
+      unit: tls && data ? "dias" : undefined,
+      sub: !data ? "Sem dados" : tls ? `${tls.valid ? "Válido" : "Inválido"} · ${tls.issuer}` : "HTTPS indisponível",
+      tone: !data ? "neutral" : !tls || !tls.valid || tls.daysRemaining < 0 ? "bad" : tls.daysRemaining < 30 ? "warn" : "ok",
+      icon: ShieldCheck,
+    },
+    {
+      title: "Destino",
+      value: data ? data.ip : "–",
+      sub: data ? `${data.redirects.length} redirect(s) · ${data.durationMs} ms` : "Sem dados",
+      tone: "neutral",
+      icon: Server,
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {stats.map((item) => (
-        <div
-          key={item.title}
-          className={`p-5 bg-zinc-950/80 border rounded-lg relative overflow-hidden flex flex-col justify-between min-h-[120px] transition-all duration-300 ${
-            item.isAlert 
-              ? "border-rose-500/20 shadow-[0_0_15px_rgba(239,68,68,0.05)]" 
-              : "border-zinc-800/60"
-          }`}
-        >
-          {/* Cantoneiras HUD Estilo Terminal */}
-          <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-zinc-800"></div>
-          <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-zinc-800"></div>
-          <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-zinc-800"></div>
-          <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-zinc-800"></div>
-
-          {/* Cabeçalho do Card */}
-          <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
-            <span className="font-mono text-[9px] font-black tracking-widest text-zinc-500 uppercase">
-              {"// "}{item.title}
-            </span>
-            <span className={`w-1 h-1 rounded-full ${isLoading ? "bg-cyan-400 animate-ping" : item.isAlert ? "bg-rose-500 animate-pulse" : "bg-zinc-700"}`} />
-          </div>
-
-          {/* Valor Numérico / Status Principal */}
-          <div className="my-2">
-            <p className={`text-3xl font-mono font-black tracking-tight ${
-              isLoading 
-                ? "text-cyan-500/60 animate-pulse text-xl tracking-widest" 
-                : item.isAlert 
-                ? "text-rose-500 drop-shadow-[0_0_6px_rgba(239,68,68,0.2)]" 
-                : "text-zinc-100"
-            }`}>
-              {item.value}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {stats.map(({ title, value, unit, sub, tone, icon: Icon }) => (
+        <div key={title} className="rounded-2xl border border-line bg-panel/90 p-5 flex gap-4 items-start">
+          <span className={`rounded-xl p-2.5 ${TONE[tone].icon}`}>
+            <Icon size={18} strokeWidth={1.75} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted">{title}</p>
+            {isLoading ? (
+              <div className="h-8 w-24 mt-1.5 rounded-md bg-panel-2 animate-pulse" />
+            ) : (
+              <p
+                className={`mt-1 font-mono font-medium tracking-tight tabular-nums truncate ${TONE[tone].text} ${
+                  value.length > 12 ? "text-lg leading-8" : "text-3xl"
+                }`}
+                title={value}
+              >
+                {value}
+                {unit && <span className="ml-1.5 font-sans text-sm text-dim">{unit}</span>}
+              </p>
+            )}
+            <p className="text-xs text-dim mt-1 truncate" title={sub}>
+              {isLoading ? "Escaneando…" : sub}
             </p>
-          </div>
-
-          {/* Subtexto de Rodapé Técnico */}
-          <div className="flex items-center justify-between font-mono text-[8px] text-zinc-600 uppercase tracking-wider pt-1.5 border-t border-zinc-900/40">
-            <span className={item.isAlert ? "text-rose-500/70" : isLoading ? "text-cyan-500/50" : "text-zinc-500"}>
-              {item.subtext}
-            </span>
-            <span>SYS_OK</span>
           </div>
         </div>
       ))}

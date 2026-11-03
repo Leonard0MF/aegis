@@ -1,0 +1,239 @@
+import type {
+  CheckCategory,
+  CheckStatus,
+  DnsInfo,
+  Grade,
+  SecurityCheck,
+  TlsInfo,
+} from "@/types/scan";
+
+export interface CheckInput {
+  tls: TlsInfo | null;
+  headers: Headers | null;
+  /** headers vieram de uma resposta HTTPS? */
+  overHttps: boolean;
+  httpRedirectsToHttps: boolean | null;
+  dns: DnsInfo;
+}
+
+const HALF_YEAR_S = 15_552_000;
+
+function check(
+  id: string,
+  category: CheckCategory,
+  label: string,
+  weight: number,
+  status: CheckStatus,
+  detail: string,
+): SecurityCheck {
+  return { id, category, label, weight, status, detail };
+}
+
+function tlsChecks(t: TlsInfo | null): SecurityCheck[] {
+  if (!t) {
+    return [check("tls-cert", "tls", "Certificado TLS", 25, "fail", "HTTPS indisponível (porta 443 não respondeu)")];
+  }
+  const out: SecurityCheck[] = [
+    check(
+      "tls-cert", "tls", "Certificado TLS", 25,
+      t.valid ? "pass" : "fail",
+      t.valid ? `Válido, emitido por ${t.issuer}` : `Inválido: ${t.error ?? "erro desconhecido"}`,
+    ),
+  ];
+
+  out.push(
+    check(
+      "tls-expiry", "tls", "Validade do certificado", 8,
+      t.daysRemaining < 0 ? "fail" : t.daysRemaining < 30 ? "warn" : "pass",
+      t.daysRemaining < 0
+        ? `Expirou há ${-t.daysRemaining} dias`
+        : `Expira em ${t.daysRemaining} dias`,
+    ),
+  );
+
+  const modern = t.protocol === "TLSv1.3" || t.protocol === "TLSv1.2";
+  out.push(
+    check("tls-protocol", "tls", "Versão do protocolo TLS", 5, modern ? "pass" : "fail", `Negociado: ${t.protocol}`),
+  );
+  return out;
+}
+
+function transportChecks(i: CheckInput): SecurityCheck[] {
+  const out: SecurityCheck[] = [];
+
+  out.push(
+    check(
+      "http-redirect", "transport", "Redirecionamento HTTP → HTTPS", 8,
+      i.httpRedirectsToHttps === true ? "pass" : i.httpRedirectsToHttps === null ? "info" : "fail",
+      i.httpRedirectsToHttps === true
+        ? "HTTP redireciona para HTTPS"
+        : i.httpRedirectsToHttps === null
+          ? "Porta 80 não respondeu"
+          : "HTTP não redireciona para HTTPS",
+    ),
+  );
+
+  const hsts = i.overHttps ? i.headers?.get("strict-transport-security") : null;
+  if (!hsts) {
+    out.push(check("hsts", "transport", "HSTS (Strict-Transport-Security)", 10, "fail", "Header Strict-Transport-Security ausente"));
+  } else {
+    const maxAge = Number(/max-age\s*=\s*"?(\d+)/i.exec(hsts)?.[1] ?? 0);
+    out.push(
+      check(
+        "hsts", "transport", "HSTS (Strict-Transport-Security)", 10,
+        maxAge >= HALF_YEAR_S ? "pass" : "warn",
+        maxAge >= HALF_YEAR_S
+          ? `max-age=${maxAge}`
+          : `max-age=${maxAge} é curto (recomendado ≥ ${HALF_YEAR_S})`,
+      ),
+    );
+    out.push(
+      check(
+        "hsts-subdomains", "transport", "HSTS em subdomínios", 0, "info",
+        /includesubdomains/i.test(hsts) ? "includeSubDomains ativo" : "Sem includeSubDomains",
+      ),
+    );
+  }
+  return out;
+}
+
+function headerChecks(h: Headers | null): SecurityCheck[] {
+  if (!h) return [];
+  const out: SecurityCheck[] = [];
+  const csp = h.get("content-security-policy");
+
+  out.push(
+    check(
+      "csp", "headers", "Content-Security-Policy", 10,
+      csp ? (/unsafe-inline|unsafe-eval/i.test(csp) ? "warn" : "pass") : "fail",
+      csp
+        ? /unsafe-inline|unsafe-eval/i.test(csp)
+          ? "Presente, mas permite unsafe-inline/unsafe-eval"
+          : "Política presente"
+        : "Header ausente",
+    ),
+  );
+
+  const xfo = h.get("x-frame-options");
+  const frameAncestors = /frame-ancestors/i.test(csp ?? "");
+  out.push(
+    check(
+      "x-frame", "headers", "Proteção contra clickjacking", 8,
+      xfo || frameAncestors ? "pass" : "fail",
+      xfo ? `X-Frame-Options: ${xfo}` : frameAncestors ? "CSP frame-ancestors" : "Sem X-Frame-Options nem frame-ancestors",
+    ),
+  );
+
+  const xcto = h.get("x-content-type-options");
+  out.push(
+    check(
+      "xcto", "headers", "X-Content-Type-Options", 5,
+      xcto?.toLowerCase().includes("nosniff") ? "pass" : "fail",
+      xcto ? `Valor: ${xcto}` : "Header ausente",
+    ),
+  );
+
+  const ref = h.get("referrer-policy");
+  out.push(
+    check(
+      "referrer", "headers", "Referrer-Policy", 4,
+      ref ? (/unsafe-url/i.test(ref) ? "warn" : "pass") : "warn",
+      ref ? `Valor: ${ref}` : "Header ausente (padrão do navegador)",
+    ),
+  );
+
+  const pp = h.get("permissions-policy");
+  out.push(
+    check("permissions", "headers", "Permissions-Policy", 3, pp ? "pass" : "warn", pp ? "Política presente" : "Header ausente"),
+  );
+
+  const leaks = ["server", "x-powered-by", "x-aspnet-version"]
+    .map((n) => [n, h.get(n)] as const)
+    .filter(([, v]) => v && /\d/.test(v));
+  out.push(
+    check(
+      "info-leak", "headers", "Exposição de versão do servidor", 3,
+      leaks.length ? "warn" : "pass",
+      leaks.length ? leaks.map(([n, v]) => `${n}: ${v}`).join(" · ") : "Nenhuma versão de software exposta",
+    ),
+  );
+
+  return out;
+}
+
+function cookieChecks(h: Headers | null): SecurityCheck[] {
+  const cookies = h?.getSetCookie() ?? [];
+  if (cookies.length === 0) {
+    return [check("cookies", "cookies", "Cookies", 0, "info", "Nenhum cookie definido na resposta")];
+  }
+  const missing = (flag: RegExp) =>
+    cookies.filter((c) => !flag.test(c)).map((c) => c.split("=")[0].trim());
+
+  const noSecure = missing(/;\s*secure/i);
+  const noHttpOnly = missing(/;\s*httponly/i);
+  const noSameSite = missing(/;\s*samesite=/i);
+  const list = (names: string[]) => names.slice(0, 4).join(", ") + (names.length > 4 ? "…" : "");
+
+  return [
+    check(
+      "cookie-secure", "cookies", "Cookies com Secure", 4,
+      noSecure.length ? "fail" : "pass",
+      noSecure.length ? `Sem Secure: ${list(noSecure)}` : `${cookies.length} cookie(s) com Secure`,
+    ),
+    check(
+      "cookie-httponly", "cookies", "Cookies com HttpOnly", 3,
+      noHttpOnly.length ? "warn" : "pass",
+      noHttpOnly.length ? `Sem HttpOnly: ${list(noHttpOnly)}` : "Todos com HttpOnly",
+    ),
+    check(
+      "cookie-samesite", "cookies", "Cookies com SameSite", 3,
+      noSameSite.length ? "warn" : "pass",
+      noSameSite.length ? `Sem SameSite: ${list(noSameSite)}` : "Todos com SameSite",
+    ),
+  ];
+}
+
+function dnsChecks(d: DnsInfo): SecurityCheck[] {
+  const dmarcPolicy = /;\s*p\s*=\s*(\w+)/i.exec(d.dmarc ?? "")?.[1]?.toLowerCase();
+  return [
+    check(
+      "spf", "dns", "SPF", 4,
+      d.spf ? (/\+all\b/i.test(d.spf) ? "fail" : "pass") : "fail",
+      d.spf ? (/\+all\b/i.test(d.spf) ? "SPF com +all (aceita qualquer remetente)" : d.spf) : "Sem registro SPF (spoofing de e-mail)",
+    ),
+    check(
+      "dmarc", "dns", "DMARC", 5,
+      !d.dmarc ? "fail" : dmarcPolicy === "none" ? "warn" : "pass",
+      !d.dmarc ? "Sem registro DMARC" : `Política: p=${dmarcPolicy ?? "?"}`,
+    ),
+    check(
+      "caa", "dns", "CAA", 0, "info",
+      d.caa.length ? `CAs autorizadas: ${d.caa.join(", ")}` : "Sem CAA (qualquer CA pode emitir)",
+    ),
+  ];
+}
+
+export function buildChecks(i: CheckInput): SecurityCheck[] {
+  return [
+    ...tlsChecks(i.tls),
+    ...transportChecks(i),
+    ...headerChecks(i.headers),
+    ...cookieChecks(i.headers),
+    ...dnsChecks(i.dns),
+  ];
+}
+
+export function computeScore(checks: SecurityCheck[]): { score: number; grade: Grade } {
+  let total = 0;
+  let earned = 0;
+  for (const c of checks) {
+    if (c.status === "info" || c.weight === 0) continue;
+    total += c.weight;
+    if (c.status === "pass") earned += c.weight;
+    else if (c.status === "warn") earned += c.weight / 2;
+  }
+  const score = total === 0 ? 0 : Math.round((earned / total) * 100);
+  const grade: Grade =
+    score >= 90 ? "A" : score >= 80 ? "B" : score >= 65 ? "C" : score >= 50 ? "D" : "F";
+  return { score, grade };
+}

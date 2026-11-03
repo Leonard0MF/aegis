@@ -1,9 +1,5 @@
+import ComingSoon from "@/components/ui/ComingSoon";
+
 export default function AssetsPage() {
-  return (
-    <main className="min-h-screen text-white p-8">
-      <h1 className="text-4xl font-bold">
-        Assets
-      </h1>
-    </main>
-  );
+  return <ComingSoon title="Ativos" description="Domínios monitorados e o último resultado de cada um." />;
 }

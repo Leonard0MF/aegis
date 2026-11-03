@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   type LucideIcon,
-  Shield,
+  LayoutDashboard,
   Activity,
-  Radar,
+  BarChart3,
   Boxes,
   Settings,
+  Shield,
 } from "lucide-react";
 
 type NavItem = {
@@ -18,84 +19,50 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { label: "CORE_DASHBOARD", href: "/", icon: Shield },
-  { label: "THREAT_FEED", href: "/threat-feed", icon: Activity },
-  { label: "ANALYTICS_MATRIX", href: "/analytics", icon: Radar },
-  { label: "ASSETS_RECON", href: "/assets", icon: Boxes },
-  { label: "SYS_SETTINGS", href: "/settings", icon: Settings },
+  { label: "Visão geral", href: "/", icon: LayoutDashboard },
+  { label: "Ameaças", href: "/threat-feed", icon: Activity },
+  { label: "Análises", href: "/analytics", icon: BarChart3 },
+  { label: "Ativos", href: "/assets", icon: Boxes },
+  { label: "Configurações", href: "/settings", icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
 
-  const getClass = (path: string) => {
-    const isCurrent = pathname === path;
-    return `group flex items-center gap-3 px-3 py-2.5 rounded font-mono text-[11px] tracking-wider transition-all duration-300 relative border cursor-pointer w-full text-left ${
-      isCurrent
-        ? "text-cyan-400 bg-cyan-500/[0.04] border-cyan-500/30 font-bold shadow-[inset_0_0_12px_rgba(6,182,212,0.05)]"
-        : "text-zinc-500 border-transparent hover:text-zinc-200 hover:bg-zinc-900/40 hover:border-zinc-800/40"
-    }`;
-  };
-
   return (
-    <aside className="w-full lg:w-64 shrink-0 lg:h-screen border-r border-zinc-900/80 bg-zinc-950/70 p-6 flex flex-col justify-between gap-6 relative select-none">
-      
-      {/* Elemento estético: Linha laser sutil no canto extremo direito para separar a sidebar */}
-      <div className="absolute top-0 right-0 w-[1px] h-32 bg-gradient-to-b from-cyan-500/30 to-transparent"></div>
+    <aside className="w-full lg:w-60 shrink-0 lg:h-screen border-b lg:border-b-0 lg:border-r border-line bg-panel/80 px-4 py-5 flex flex-col gap-8 select-none">
+      <Link href="/" className="flex items-center gap-2.5 px-2">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent/15 text-accent ring-1 ring-inset ring-accent/25">
+          <Shield size={16} strokeWidth={2} />
+        </span>
+        <span>
+          <span className="block text-[15px] font-semibold tracking-tight text-fg">Aegis</span>
+          <span className="block text-[11px] text-dim -mt-0.5">Security scanner</span>
+        </span>
+      </Link>
 
-      <div>
-        {/* Logo Area - Estilo HUD Tático */}
-        <div className="mb-10 font-mono relative">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-black tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-r from-zinc-50 to-zinc-400 uppercase">
-              AEGIS
-            </h1>
-            <span className="text-[7px] text-cyan-500/70 bg-cyan-950/40 border border-cyan-800/30 px-1 py-px rounded font-bold tracking-normal animate-pulse">
-              v1.0.4
-            </span>
-          </div>
+      <nav className="flex lg:flex-col gap-1 overflow-x-auto">
+        {navItems.map(({ label, href, icon: Icon }) => {
+          const active = pathname === href;
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm whitespace-nowrap transition-colors ${
+                active
+                  ? "bg-panel-2 text-fg ring-1 ring-inset ring-line-strong"
+                  : "text-muted hover:text-fg hover:bg-panel-2/60"
+              }`}
+            >
+              <Icon size={16} strokeWidth={1.75} className={active ? "text-accent" : "text-dim"} />
+              {label}
+            </Link>
+          );
+        })}
+      </nav>
 
-          <p className="text-[9px] text-zinc-600 mt-1 uppercase tracking-widest">
-            {"// THREAT_INTEL_GATEWAY"}
-          </p>
-        </div>
-
-        {/* Navigation - Links reais com monitoramento de rota */}
-        <nav className="space-y-1.5">
-          {navItems.map(({ label, href, icon: Icon }) => {
-            const isCurrent = pathname === href;
-            return (
-              <Link key={href} href={href} className={getClass(href)}>
-                {/* Pequeno ponteiro/mira laser lateral para o link ativo */}
-                {isCurrent && (
-                  <span className="absolute left-0 top-1/4 bottom-1/4 w-[2px] bg-cyan-400 rounded-r shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
-                )}
-                
-                <Icon 
-                  size={14} 
-                  className={`transition-colors duration-300 ${
-                    isCurrent ? "text-cyan-400" : "text-zinc-600 group-hover:text-zinc-400"
-                  }`} 
-                />
-                <span>{label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-
-      {/* Rodapé da Sidebar - Dados do Terminal Operacional */}
-      <div className="font-mono text-[8px] text-zinc-600 space-y-1 border-t border-zinc-900/60 pt-4">
-        <div className="flex justify-between">
-          <span>SECURE_CONNECTION:</span>
-          <span className="text-emerald-500 font-bold">YES</span>
-        </div>
-        <div className="flex justify-between">
-          <span>ENC_METHOD:</span>
-          <span className="text-zinc-500">ECDSA_P256</span>
-        </div>
-      </div>
-
+      <div className="mt-auto hidden lg:block px-2 text-[11px] text-dim">v1.0.4</div>
     </aside>
   );
 }

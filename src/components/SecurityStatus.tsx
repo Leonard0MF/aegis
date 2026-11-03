@@ -1,122 +1,80 @@
 "use client";
 
-type StatusType = "ok" | "warning" | "critical";
+import type { CheckCategory, SecurityCheck } from "@/types/scan";
+import Panel from "@/components/ui/Panel";
+import StatusBadge from "@/components/ui/StatusBadge";
 
 interface SecurityStatusProps {
-  headers?: {
-    csp: boolean;
-    hsts: boolean;
-    xFrameOptions: boolean;
-  };
+  checks?: SecurityCheck[];
   isLoading: boolean;
 }
 
-export default function SecurityStatus({ headers, isLoading }: SecurityStatusProps) {
-  // Converte os dados reais recebidos do scanner para a estrutura visual do componente
-  const items = headers 
-    ? [
-        { label: "CONTENT_SECURITY_POLICY (CSP)", status: (headers.csp ? "ok" : "critical") as StatusType, text: headers.csp ? "ENFORCED" : "MISSING" },
-        { label: "STRICT_TRANSPORT_SECURITY (HSTS)", status: (headers.hsts ? "ok" : "warning") as StatusType, text: headers.hsts ? "ACTIVE" : "MISSING" },
-        { label: "ANTI_CLICKJACKING (X-FRAME)", status: (headers.xFrameOptions ? "ok" : "critical") as StatusType, text: headers.xFrameOptions ? "DENY_CONFIGURED" : "BYPASS_RISK" },
-        { label: "NETWORK_FIREWALL_INTEGRITY", status: "ok" as StatusType, text: "ROUTING_STABLE" },
-      ]
-    : [
-        { label: "FIREWALL_INSPECTION_GATE", status: "ok" as StatusType, text: "OPERATIONAL" },
-        { label: "SSL_TLS_CRYPTO_SUITE", status: "ok" as StatusType, text: "PROTECTED_TLS1.3" },
-        { label: "THREAT_DETECTION_DAEMON", status: "warning" as StatusType, text: "ELEVATED_ACTIVITY" },
-        { label: "INFRASTRUCTURE_METRICS", status: "ok" as StatusType, text: "STABLE" },
-      ];
+const CATEGORY_LABEL: Record<CheckCategory, string> = {
+  tls: "TLS",
+  transport: "Transporte",
+  headers: "Headers HTTP",
+  cookies: "Cookies",
+  dns: "DNS e e-mail",
+};
 
-  const getStatusStyles = (status: StatusType) => {
-    switch (status) {
-      case "ok":
-        return {
-          text: "text-emerald-400",
-          bg: "bg-emerald-500",
-          glow: "shadow-[0_0_10px_rgba(16,185,129,0.5)]",
-          border: "border-emerald-500/20"
-        };
-      case "warning":
-        return {
-          text: "text-amber-400",
-          bg: "bg-amber-500",
-          glow: "shadow-[0_0_10px_rgba(245,158,11,0.5)]",
-          border: "border-amber-500/20"
-        };
-      case "critical":
-        return {
-          text: "text-rose-500",
-          bg: "bg-rose-500",
-          glow: "shadow-[0_0_10px_rgba(239,68,68,0.5)]",
-          border: "border-rose-500/20"
-        };
-    }
-  };
+const CATEGORY_ORDER: CheckCategory[] = ["tls", "transport", "headers", "cookies", "dns"];
+
+export default function SecurityStatus({ checks, isLoading }: SecurityStatusProps) {
+  const count = (s: SecurityCheck["status"]) => checks?.filter((c) => c.status === s).length ?? 0;
 
   return (
-    <div className="p-6 bg-zinc-950/80 border border-zinc-800/60 rounded-lg relative overflow-hidden min-h-[190px] flex flex-col justify-between">
-      
-      {/* Cantoneiras HUD Estilo Terminal Tático */}
-      <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-zinc-800"></div>
-      <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-zinc-800"></div>
-      <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-zinc-800"></div>
-      <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-zinc-800"></div>
-
-      {/* Header do Card */}
-      <div className="border-b border-zinc-900 pb-2 mb-4">
-        <h3 className="text-[10px] font-mono font-black tracking-widest text-zinc-500 uppercase">
-          {"// CRITICAL_SUBSYSTEM_MATRIX"}
-        </h3>
-      </div>
-
-      {/* Grid de Sub-módulos */}
-      <div className="space-y-3.5 flex-1 flex flex-col justify-center">
-        {isLoading ? (
-          /* Estado Carregando: Esqueletos de Linha Ciano Pulsantes */
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex items-center justify-between animate-pulse">
-              <div className="space-y-1 w-2/3">
-                <div className="h-2 bg-zinc-900 rounded w-3/4"></div>
-                <div className="h-1.5 bg-cyan-950 rounded w-1/2"></div>
-              </div>
-              <div className="w-1.5 h-1.5 rounded-full bg-cyan-900"></div>
-            </div>
-          ))
+    <Panel
+      title="Verificações"
+      subtitle={
+        checks && !isLoading ? (
+          <span className="tabular-nums">
+            <span className="text-ok">{count("pass")} ok</span>
+            {" · "}
+            <span className="text-warn">{count("warn")} atenção</span>
+            {" · "}
+            <span className="text-bad">{count("fail")} falhas</span>
+          </span>
         ) : (
-          /* Estado Ativo com Dados de Diagnóstico */
-          items.map((item) => {
-            const styles = getStatusStyles(item.status);
+          "TLS, transporte, headers, cookies e DNS"
+        )
+      }
+      className="max-h-[560px]"
+      bodyClassName="overflow-y-auto"
+    >
+      {isLoading ? (
+        <div className="space-y-3 pt-1">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-10 rounded-lg bg-panel-2 animate-pulse" />
+          ))}
+        </div>
+      ) : !checks ? (
+        <p className="text-sm text-dim py-10 text-center">Nenhum resultado ainda.</p>
+      ) : (
+        <div className="space-y-5">
+          {CATEGORY_ORDER.map((cat) => {
+            const items = checks.filter((c) => c.category === cat);
+            if (items.length === 0) return null;
             return (
-              <div 
-                key={item.label} 
-                className={`flex items-center justify-between p-2 rounded bg-zinc-900/40 border ${styles.border} transition-all duration-300 hover:bg-zinc-900/30 group`}
-              >
-                <div className="font-mono">
-                  <p className="text-[9px] text-zinc-500 tracking-wider group-hover:text-zinc-400 transition-colors uppercase">
-                    {item.label}
-                  </p>
-                  <p className={`text-[10px] font-black mt-0.5 tracking-widest ${styles.text}`}>
-                    &gt; {item.text}
-                  </p>
-                </div>
-
-                {/* Led Indicador com Efeito Pulsante de Atividade */}
-                <div className="relative flex h-2 w-2 items-center justify-center">
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-40 ${styles.bg}`}></span>
-                  <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${styles.bg} ${styles.glow}`}></span>
-                </div>
+              <div key={cat}>
+                <p className="text-[11px] font-medium uppercase tracking-wider text-dim mb-1.5">
+                  {CATEGORY_LABEL[cat]}
+                </p>
+                <ul className="divide-y divide-line/70 rounded-xl border border-line/70 bg-canvas/40">
+                  {items.map((c) => (
+                    <li key={c.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="text-[13px] text-fg">{c.label}</p>
+                        <p className="text-xs text-dim mt-0.5 break-words">{c.detail}</p>
+                      </div>
+                      <StatusBadge status={c.status} />
+                    </li>
+                  ))}
+                </ul>
               </div>
             );
-          })
-        )}
-      </div>
-
-      {/* Rodapé Técnico */}
-      <div className="text-[8px] font-mono text-zinc-600 mt-3 tracking-widest uppercase flex justify-between select-none">
-        <span>SECURITY_DAEMON_V36</span>
-        <span>STREAM_OK</span>
-      </div>
-
-    </div>
+          })}
+        </div>
+      )}
+    </Panel>
   );
 }
