@@ -137,7 +137,7 @@ export default function ThreatFeed({
   }, []);
 
   return (
-    <div className="p-6 bg-zinc-950/40 border border-zinc-800/60 rounded-lg backdrop-blur-md relative overflow-hidden h-full flex flex-col min-h-[440px]">
+    <div className="p-6 bg-zinc-950/80 border border-zinc-800/60 rounded-lg relative overflow-hidden h-full flex flex-col min-h-[440px]">
 
       <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-zinc-800"></div>
       <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-zinc-800"></div>

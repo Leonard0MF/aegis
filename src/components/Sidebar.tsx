@@ -38,7 +38,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-full lg:w-64 shrink-0 lg:h-screen border-r border-zinc-900/80 bg-zinc-950/20 backdrop-blur-md p-6 flex flex-col justify-between gap-6 relative select-none">
+    <aside className="w-full lg:w-64 shrink-0 lg:h-screen border-r border-zinc-900/80 bg-zinc-950/70 p-6 flex flex-col justify-between gap-6 relative select-none">
       
       {/* Elemento estético: Linha laser sutil no canto extremo direito para separar a sidebar */}
       <div className="absolute top-0 right-0 w-[1px] h-32 bg-gradient-to-b from-cyan-500/30 to-transparent"></div>

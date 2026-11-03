@@ -54,7 +54,7 @@ export default function SecurityStatus({ headers, isLoading }: SecurityStatusPro
   };
 
   return (
-    <div className="p-6 bg-zinc-950/40 border border-zinc-800/60 rounded-lg backdrop-blur-md relative overflow-hidden min-h-[190px] flex flex-col justify-between">
+    <div className="p-6 bg-zinc-950/80 border border-zinc-800/60 rounded-lg relative overflow-hidden min-h-[190px] flex flex-col justify-between">
       
       {/* Cantoneiras HUD Estilo Terminal Tático */}
       <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-zinc-800"></div>
@@ -89,7 +89,7 @@ export default function SecurityStatus({ headers, isLoading }: SecurityStatusPro
             return (
               <div 
                 key={item.label} 
-                className={`flex items-center justify-between p-2 rounded bg-zinc-900/10 border ${styles.border} backdrop-blur-sm transition-all duration-300 hover:bg-zinc-900/30 group`}
+                className={`flex items-center justify-between p-2 rounded bg-zinc-900/40 border ${styles.border} transition-all duration-300 hover:bg-zinc-900/30 group`}
               >
                 <div className="font-mono">
                   <p className="text-[9px] text-zinc-500 tracking-wider group-hover:text-zinc-400 transition-colors uppercase">

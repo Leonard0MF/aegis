@@ -211,7 +211,7 @@ function buildContinentXYZ(): [number,number,number][][][] {
 
 function buildDots(): [number, number, number][] {
   const dots: [number, number, number][] = [];
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 400; i++) {
     const lat = Math.random() * 180 - 90;
     const lon = Math.random() * 360 - 180;
     const φ = lat * Math.PI / 180;
@@ -221,6 +221,26 @@ function buildDots(): [number, number, number][] {
   }
   return dots;
 }
+
+// Grade lat/lon pré-calculada (antes era recalculada com map/spread a cada frame)
+function buildGrid(): [number, number, number][][] {
+  const lines: [number, number, number][][] = [];
+  for (let lat = -80; lat <= 80; lat += 20) {
+    const l: [number, number, number][] = [];
+    for (let lon = -180; lon <= 180; lon += 6) l.push(ll2xyz(lat, lon, 1));
+    lines.push(l);
+  }
+  for (let lon = -180; lon < 180; lon += 30) {
+    const l: [number, number, number][] = [];
+    for (let lat = -90; lat <= 90; lat += 6) l.push(ll2xyz(lat, lon, 1));
+    lines.push(l);
+  }
+  return lines;
+}
+
+const HUBS_XYZ = HUBS.map(h => ll2xyz(h.lat, h.lon, 1));
+const FRAME_MS = 1000 / 30; // limite de ~30 fps
+const DOT_BUCKETS = 6;      // pontos agrupados por opacidade -> poucos fill() por frame
 
 interface Arc {
   pts: [number,number,number][];
@@ -246,6 +266,9 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
 
     const DOTS    = buildDots();
     const CONTXYZ = buildContinentXYZ();
+    const GRID    = buildGrid();
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let lastFrame = 0;
     const arcs: Arc[] = [];
     let lastArc  = 0;
     let ry       = 0;
@@ -382,34 +405,32 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
           
           ctx.strokeStyle = `rgba(6,182,212,${(contAlpha * 0.85).toFixed(3)})`;
           ctx.lineWidth   = 1.2 + focusT * 0.8;
-          ctx.shadowColor = "rgba(6,182,212,0.6)";
-          ctx.shadowBlur  = 4 + focusT * 6;
           ctx.stroke();
-          ctx.shadowBlur  = 0;
         }
       }
     }
 
     function draw(now: number) {
-      if (W === 0 || H === 0) { 
-        rafId = requestAnimationFrame(draw);
-        return;
-      }
+      rafId = requestAnimationFrame(draw);
+      if (W === 0 || H === 0 || document.hidden) return;
+      if (now - lastFrame < FRAME_MS) return;
+      lastFrame = now;
 
       const focus = focusRef.current;
-      focusT += ((focus ? 1 : 0) - focusT) * 0.04;
+      focusT += ((focus ? 1 : 0) - focusT) * 0.08;
 
       if (!dragging) {
-        velX *= 0.92;
-        velY *= 0.92;
+        velX *= 0.85;
+        velY *= 0.85;
         manualRY += velX;
         manualRX += velY;
         manualRX = Math.max(-0.8, Math.min(0.8, manualRX));
       }
 
       // Rotação automática mais suave quando não está arrastando
-      if (!dragging && Math.abs(velX) < 0.001 && Math.abs(velY) < 0.001) {
-        ry += 0.0008 + focusT * 0.0015;
+      if (!reduceMotion && !dragging && Math.abs(velX) < 0.001 && Math.abs(velY) < 0.001) {
+        // valores dobrados para compensar 30 fps em vez de 60
+        ry += 0.0016 + focusT * 0.003;
       }
 
       const totalRY = ry + manualRY;
@@ -439,39 +460,18 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
       ctx.strokeStyle = "rgba(6,182,212,0.05)";
       ctx.lineWidth   = 0.6;
       
-      for (let lat = -80; lat <= 80; lat += 20) {
-        ctx.beginPath();
+      ctx.beginPath();
+      for (const line of GRID) {
         let first = true;
-        for (let lon = -180; lon <= 180; lon += 4) {
-          const p = proj(...(ll2xyz(lat, lon, 1).map(v => v*R) as [number,number,number]), 
-                         totalRY, totalRX, cx, cy, R);
-          if (!p || p.rz < -R*0.1) { 
-            first = true; 
-            continue; 
-          }
+        for (const [gx, gy, gz] of line) {
+          const p = proj(gx*R, gy*R, gz*R, totalRY, totalRX, cx, cy, R);
+          if (!p || p.rz < -R*0.1) { first = true; continue; }
           if (first) ctx.moveTo(p.sx, p.sy);
           else ctx.lineTo(p.sx, p.sy);
           first = false;
         }
-        ctx.stroke();
       }
-
-      for (let lon = -180; lon <= 180; lon += 30) {
-        ctx.beginPath();
-        let first = true;
-        for (let lat = -90; lat <= 90; lat += 4) {
-          const p = proj(...(ll2xyz(lat, lon, 1).map(v => v*R) as [number,number,number]), 
-                         totalRY, totalRX, cx, cy, R);
-          if (!p || p.rz < -R*0.1) { 
-            first = true; 
-            continue; 
-          }
-          if (first) ctx.moveTo(p.sx, p.sy);
-          else ctx.lineTo(p.sx, p.sy);
-          first = false;
-        }
-        ctx.stroke();
-      }
+      ctx.stroke();
 
       // Desenhar continentes
       const contAlpha = 0.2 + focusT * 0.6;
@@ -482,15 +482,21 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
       // Dots
       const dotOpacity = 0.55 - focusT * 0.3;
       if (dotOpacity > 0.05) {
-        for (const [dx, dy, dz] of DOTS) {
-          const p = proj(dx*R, dy*R, dz*R, totalRY, totalRX, cx, cy, R);
-          if (!p || p.rz < 0) continue;
-          const d01  = (p.rz/R + 1) / 2;
-          const a    = (0.12 + d01 * 0.35) * dotOpacity;
-          const size = Math.max((0.6+d01*0.9)*(R/220), 0.6);
+        const sizeK = R / 220;
+        for (let b = 0; b < DOT_BUCKETS; b++) {
+          const lo = b / DOT_BUCKETS, hi = (b + 1) / DOT_BUCKETS;
+          const mid = (lo + hi) / 2;
           ctx.beginPath();
-          ctx.arc(p.sx, p.sy, size, 0, Math.PI*2);
-          ctx.fillStyle = `rgba(6,182,212,${a.toFixed(2)})`;
+          for (const [dx, dy, dz] of DOTS) {
+            const p = proj(dx*R, dy*R, dz*R, totalRY, totalRX, cx, cy, R);
+            if (!p || p.rz < 0) continue;
+            const d01 = (p.rz/R + 1) / 2;
+            if (d01 < lo || d01 >= hi) continue;
+            const size = Math.max((0.6+d01*0.9)*sizeK, 0.6);
+            ctx.moveTo(p.sx + size, p.sy);
+            ctx.arc(p.sx, p.sy, size, 0, Math.PI*2);
+          }
+          ctx.fillStyle = `rgba(6,182,212,${((0.12 + mid*0.35) * dotOpacity).toFixed(2)})`;
           ctx.fill();
         }
       }
@@ -498,8 +504,9 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
       // Hub nodes
       const hubAlpha = Math.min(focusT / 0.4, 1);
       if (hubAlpha > 0.02) {
-        for (const hub of HUBS) {
-          const [hx,hy,hz] = ll2xyz(hub.lat, hub.lon, 1);
+        for (let h = 0; h < HUBS.length; h++) {
+          const hub = HUBS[h];
+          const [hx,hy,hz] = HUBS_XYZ[h];
           const p = proj(hx*R, hy*R, hz*R, totalRY, totalRX, cx, cy, R);
           if (!p || p.rz < 0) continue;
           
@@ -511,13 +518,15 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
           ctx.lineWidth = 1.2;
           ctx.stroke();
           
+          // glow barato: círculo maior translúcido em vez de shadowBlur
+          ctx.beginPath();
+          ctx.arc(p.sx, p.sy, 6, 0, Math.PI*2);
+          ctx.fillStyle = `rgba(0,240,255,${(0.2*hubAlpha).toFixed(2)})`;
+          ctx.fill();
           ctx.beginPath();
           ctx.arc(p.sx, p.sy, 3, 0, Math.PI*2);
-          ctx.fillStyle   = `rgba(0,240,255,${hubAlpha.toFixed(2)})`;
-          ctx.shadowColor = "#00F0FF";
-          ctx.shadowBlur  = 10 * hubAlpha;
+          ctx.fillStyle = `rgba(0,240,255,${hubAlpha.toFixed(2)})`;
           ctx.fill();
-          ctx.shadowBlur  = 0;
           
           if (hubAlpha > 0.3) {
             ctx.font      = `bold ${Math.round(9+focusT*2.5)}px monospace`;
@@ -529,7 +538,7 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
 
       // Arcs
       const gap   = focus ? 500 : 2000;
-      const speed = 0.013 + focusT * 0.012;
+      const speed = (0.013 + focusT * 0.012) * 2;
       if (now - lastArc > gap) { 
         spawnArc(); 
         lastArc = now; 
@@ -537,7 +546,7 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
 
       for (const arc of arcs) {
         if (arc.prog < 1) arc.prog = Math.min(arc.prog + speed, 1);
-        else              arc.alpha = Math.max(arc.alpha - 0.007, 0);
+        else              arc.alpha = Math.max(arc.alpha - 0.014, 0);
         
         const n = Math.floor(arc.prog * arc.pts.length);
         if (n < 2) continue;
@@ -557,12 +566,14 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
         
         const op  = arc.alpha * (0.35 + focusT * 0.55);
         const hex = Math.round(op*255).toString(16).padStart(2,"0");
+        // glow barato: traço largo e translúcido por baixo, em vez de shadowBlur
+        const glowHex = Math.round(op*0.25*255).toString(16).padStart(2,"0");
+        ctx.strokeStyle = arc.color + glowHex;
+        ctx.lineWidth   = 5 + focusT * 4;
+        ctx.stroke();
         ctx.strokeStyle = arc.color + hex;
         ctx.lineWidth   = 1.5 + focusT * 0.8;
-        ctx.shadowColor = arc.color;
-        ctx.shadowBlur  = 6 + focusT * 10;
         ctx.stroke();
-        ctx.shadowBlur  = 0;
 
         // Arc head
         if (arc.prog < 1) {
@@ -571,11 +582,8 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
           if (tp) {
             ctx.beginPath();
             ctx.arc(tp.sx, tp.sy, 3+focusT*2, 0, Math.PI*2);
-            ctx.fillStyle   = arc.color;
-            ctx.shadowColor = arc.color;
-            ctx.shadowBlur  = 4;
+            ctx.fillStyle = arc.color;
             ctx.fill();
-            ctx.shadowBlur  = 0;
           }
         }
       }
@@ -594,7 +602,6 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
         ctx.fillText("// DRAG TO ROTATE", 16, H - 16);
       }
 
-      rafId = requestAnimationFrame(draw);
     }
 
     rafId = requestAnimationFrame(draw);

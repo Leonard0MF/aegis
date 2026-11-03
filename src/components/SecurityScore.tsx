@@ -38,7 +38,7 @@ export default function SecurityScore({ score, isLoading }: SecurityScoreProps) 
     : "border-rose-500";
 
   return (
-    <div className={`p-6 bg-zinc-950/40 border border-zinc-800/60 rounded-lg backdrop-blur-md relative overflow-hidden flex items-center justify-between min-h-[190px] transition-all duration-500 ${!isLoading && hasScore ? `shadow-[0_0_25px_rgba(0,0,0,0.5)]` : ""}`}>
+    <div className={`p-6 bg-zinc-950/80 border border-zinc-800/60 rounded-lg relative overflow-hidden flex items-center justify-between min-h-[190px] transition-all duration-500 ${!isLoading && hasScore ? `shadow-[0_0_25px_rgba(0,0,0,0.5)]` : ""}`}>
       
       {/* Cantoneiras HUD Estilo Mira Militar */}
       <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-zinc-800"></div>

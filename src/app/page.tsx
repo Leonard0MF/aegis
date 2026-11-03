@@ -50,7 +50,7 @@ export default function Home() {
         <section className="flex-1 min-h-0 p-4 md:p-8 overflow-hidden relative flex flex-col">
 
           {/* Header */}
-          <div className="pointer-events-auto flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-zinc-800/30 backdrop-blur-md pb-6 mb-8">
+          <div className="pointer-events-auto flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-zinc-800/30 pb-6 mb-8">
             <div>
               <h2 className="text-xl font-mono font-black tracking-widest text-zinc-100 uppercase">
                 {isFocusMode ? "// GLOBAL_MATRIX" : "// AEGIS_CORE"}
@@ -97,7 +97,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setFocusMode(true)}
-                    className="w-full text-left p-8 bg-zinc-950/20 border border-zinc-800/40 rounded-lg backdrop-blur-md cursor-pointer group hover:border-cyan-500/30 transition-all"
+                    className="w-full text-left p-8 bg-zinc-950/70 border border-zinc-800/40 rounded-lg cursor-pointer group hover:border-cyan-500/30 transition-all"
                   >
                     <h3 className="text-[10px] font-mono font-black text-zinc-500 group-hover:text-cyan-400 uppercase tracking-[0.2em]">
                       {"// GEOLOCATION_TELEMETRY_OVERLAY"}

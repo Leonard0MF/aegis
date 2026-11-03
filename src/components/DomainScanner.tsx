@@ -20,7 +20,7 @@ export default function DomainScanner({ onScan, isLoading }: DomainScannerProps)
     <div className="relative w-full">
       <form onSubmit={handleSubmit} className="w-full relative group">
         {/* Container do Input estilo Terminal HUD */}
-        <div className="relative flex items-center bg-zinc-950/40 border border-zinc-800/80 rounded p-1 backdrop-blur-md transition-all duration-300 focus-within:border-cyan-500/40 focus-within:shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+        <div className="relative flex items-center bg-zinc-950/80 border border-zinc-800/80 rounded p-1 transition-all duration-300 focus-within:border-cyan-500/40 focus-within:shadow-[0_0_15px_rgba(6,182,212,0.1)]">
           
           {/* Cantoneiras Estéticas de Interface nos cantos do formulário */}
           <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-zinc-700"></div>
@@ -58,7 +58,7 @@ export default function DomainScanner({ onScan, isLoading }: DomainScannerProps)
 
       {/* Logs do Scanner que aparecem logo abaixo do input em tempo de execução */}
       {isLoading && (
-        <div className="absolute top-full left-0 right-0 mt-3 p-3 bg-black/60 border border-cyan-500/20 rounded backdrop-blur-md space-y-1 font-mono text-[10px] text-cyan-400/80 animate-fadeIn z-50">
+        <div className="absolute top-full left-0 right-0 mt-3 p-3 bg-black/85 border border-cyan-500/20 rounded space-y-1 font-mono text-[10px] text-cyan-400/80 animate-fadeIn z-50">
           <div className="flex items-center gap-2">
             <span className="animate-pulse">●</span>
             <span className="tracking-wider uppercase">{"// INITIATING PACKET CAPTURE ON TARGET"}</span>

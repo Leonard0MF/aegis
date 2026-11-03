@@ -40,7 +40,7 @@ export default function StatsCards({ data, isLoading }: StatsCardsProps) {
       {stats.map((item) => (
         <div
           key={item.title}
-          className={`p-5 bg-zinc-950/40 border rounded-lg backdrop-blur-md relative overflow-hidden flex flex-col justify-between min-h-[120px] transition-all duration-300 ${
+          className={`p-5 bg-zinc-950/80 border rounded-lg relative overflow-hidden flex flex-col justify-between min-h-[120px] transition-all duration-300 ${
             item.isAlert 
               ? "border-rose-500/20 shadow-[0_0_15px_rgba(239,68,68,0.05)]" 
               : "border-zinc-800/60"
