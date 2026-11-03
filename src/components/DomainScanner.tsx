@@ -49,7 +49,7 @@ export default function DomainScanner({ onScan, isLoading }: DomainScannerProps)
             className="relative overflow-hidden font-mono text-[9px] font-bold tracking-widest uppercase px-4 py-1.5 rounded bg-zinc-900/60 border border-zinc-800/80 text-zinc-400 transition-all duration-200 hover:text-cyan-400 hover:border-cyan-500/50 active:scale-95 disabled:opacity-20 disabled:hover:text-zinc-400 disabled:hover:border-zinc-800 disabled:pointer-events-none"
           >
             {isLoading && (
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-500/10 to-transparent animate-[loading_1.5s_infinite_linear]" />
+              <div className="absolute inset-0 bg-linear-to-r from-transparent via-cyan-500/10 to-transparent animate-[loading_1.5s_infinite_linear]" />
             )}
             {isLoading ? "SCANNING" : "EXECUTE"}
           </button>
@@ -58,10 +58,10 @@ export default function DomainScanner({ onScan, isLoading }: DomainScannerProps)
 
       {/* Logs do Scanner que aparecem logo abaixo do input em tempo de execução */}
       {isLoading && (
-        <div className="absolute top-full left-0 right-0 mt-3 p-3 bg-black/60 border border-cyan-500/20 rounded backdrop-blur-md space-y-1 font-mono text-[10px] text-cyan-400/80 animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+        <div className="absolute top-full left-0 right-0 mt-3 p-3 bg-black/60 border border-cyan-500/20 rounded backdrop-blur-md space-y-1 font-mono text-[10px] text-cyan-400/80 animate-fadeIn z-50">
           <div className="flex items-center gap-2">
             <span className="animate-pulse">●</span>
-            <span className="tracking-wider uppercase">// INITIATING PACKET CAPTURE ON TARGET</span>
+            <span className="tracking-wider uppercase">{"// INITIATING PACKET CAPTURE ON TARGET"}</span>
           </div>
           <div className="text-zinc-500 pl-4 animate-pulse delay-75">
             &gt; RESOLVING DNS RECORDS... DONE

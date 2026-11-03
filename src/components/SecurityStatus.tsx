@@ -15,9 +15,9 @@ export default function SecurityStatus({ headers, isLoading }: SecurityStatusPro
   // Converte os dados reais recebidos do scanner para a estrutura visual do componente
   const items = headers 
     ? [
-        { label: "CONTENT_SECURITY_POLICY (CSP)", status: headers.csp ? "ok" : "critical" as StatusType, text: headers.csp ? "ENFORCED" : "MISSING" },
-        { label: "STRICT_TRANSPORT_SECURITY (HSTS)", status: headers.hsts ? "ok" : "warning" as StatusType, text: headers.hsts ? "ACTIVE" : "NO_PRELOAD" },
-        { label: "ANTI_CLICKJACKING (X-FRAME)", status: headers.xFrameOptions ? "ok" : "critical" as StatusType, text: headers.xFrameOptions ? "DENY_CONFIGURED" : "BYPASS_RISK" },
+        { label: "CONTENT_SECURITY_POLICY (CSP)", status: (headers.csp ? "ok" : "critical") as StatusType, text: headers.csp ? "ENFORCED" : "MISSING" },
+        { label: "STRICT_TRANSPORT_SECURITY (HSTS)", status: (headers.hsts ? "ok" : "warning") as StatusType, text: headers.hsts ? "ACTIVE" : "MISSING" },
+        { label: "ANTI_CLICKJACKING (X-FRAME)", status: (headers.xFrameOptions ? "ok" : "critical") as StatusType, text: headers.xFrameOptions ? "DENY_CONFIGURED" : "BYPASS_RISK" },
         { label: "NETWORK_FIREWALL_INTEGRITY", status: "ok" as StatusType, text: "ROUTING_STABLE" },
       ]
     : [
@@ -65,7 +65,7 @@ export default function SecurityStatus({ headers, isLoading }: SecurityStatusPro
       {/* Header do Card */}
       <div className="border-b border-zinc-900 pb-2 mb-4">
         <h3 className="text-[10px] font-mono font-black tracking-widest text-zinc-500 uppercase">
-          // CRITICAL_SUBSYSTEM_MATRIX
+          {"// CRITICAL_SUBSYSTEM_MATRIX"}
         </h3>
       </div>
 

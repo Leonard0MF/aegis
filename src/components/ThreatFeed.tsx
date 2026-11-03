@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 type ThreatLevel = "info" | "warning" | "critical" | "success";
 
 type ThreatEvent = {
-  id?: string;
+  id: string;
   type: ThreatLevel;
   message: string;
   time: string;
@@ -52,28 +52,36 @@ const initialFeed: ThreatEvent[] = [
     type: "critical",
     message: "OPEN_SSH_PORT_DETECTED // PORT_22",
     time: "16:31:42",
+    id: "seed-0",
   },
   {
     type: "warning",
     message: "MISSING_CSP_SECURITY_HEADER",
     time: "16:30:15",
+    id: "seed-1",
   },
   {
     type: "success",
     message: "SSL_CERTIFICATE_VALID_TLS_1.3",
     time: "16:28:59",
+    id: "seed-2",
   },
   {
     type: "warning",
     message: "OUTDATED_TLS_CONFIGURATION_V1.1",
     time: "16:25:04",
+    id: "seed-3",
   },
   {
     type: "info",
     message: "TARGET_ASSET_RECON_COMPLETED",
     time: "16:22:11",
+    id: "seed-4",
   },
 ];
+
+// Contador local: crypto.randomUUID() não existe fora de contexto seguro (http via IP)
+let eventSeq = 0;
 
 const mapColorToLevel = (color?: string): ThreatLevel => {
   if (color === "#FF0055") return "critical";
@@ -91,6 +99,7 @@ export default function ThreatFeed({
   useEffect(() => {
     const handleNewAttack = (e: Event) => {
       const detail = (e as CustomEvent).detail;
+      if (!detail?.origin || !detail?.target) return;
 
       const now = new Date();
       const timeStr = now
@@ -102,7 +111,7 @@ export default function ThreatFeed({
       );
 
       const newEvent: ThreatEvent = {
-        id: crypto.randomUUID(),
+        id: `evt-${++eventSeq}`,
         type: threatType,
         message: `INTERCEPT_PACKET // ORIGIN: ${detail.origin.toUpperCase()} -> TARGET: ${detail.target.toUpperCase()}`,
         time: timeStr,
@@ -137,7 +146,7 @@ export default function ThreatFeed({
 
       <div className="border-b border-zinc-900 pb-2 mb-4 flex items-center justify-between">
         <h3 className="text-[10px] font-mono font-black tracking-widest text-zinc-500 uppercase">
-          // LIVE_THREAT_FEED
+          {"// LIVE_THREAT_FEED"}
         </h3>
 
         <div className="w-2 h-2 rounded-full bg-emerald-500" />

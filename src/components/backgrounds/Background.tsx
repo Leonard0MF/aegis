@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 
 interface BackgroundProps {
-  mode?: string;
   isFocusMode?: boolean;
 }
 
@@ -23,8 +22,6 @@ const HUBS = [
   { name: "Seoul",          lat:  37.6, lon:  126.9 },
   { name: "Paris",          lat:  48.8, lon:    2.3 },
 ];
-
-const COLORS = ["#FF0055", "#00FF66", "#00F0FF", "#FFB800"];
 
 // Continentes melhorados com geometria completa
 const CONTINENTS: [number, number][][][] = [
@@ -144,7 +141,7 @@ function proj(
   cx: number, cy: number, R: number
 ) {
   const cosY = Math.cos(ry), sinY = Math.sin(ry);
-  let px =  x * cosY + z * sinY;
+  const px =  x * cosY + z * sinY;
   let py =  y;
   let pz = -x * sinY + z * cosY;
   const cosX = Math.cos(rx), sinX = Math.sin(rx);
@@ -252,7 +249,8 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
     const arcs: Arc[] = [];
     let lastArc  = 0;
     let ry       = 0;
-    let rxTilt   = 0.2;
+    const rxTilt = 0.2;
+    let rafId    = 0;
     let focusT   = focusRef.current ? 1 : 0;
     let W = 0, H = 0;
 
@@ -334,14 +332,15 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
       let   bi = Math.floor(Math.random() * HUBS.length);
       while (bi === ai) bi = Math.floor(Math.random() * HUBS.length);
       const a = HUBS[ai], b = HUBS[bi];
+      const color = COLORS_GLOW[Math.floor(Math.random()*COLORS_GLOW.length)];
       arcs.push({
         pts: interpolateArc(a.lat, a.lon, b.lat, b.lon, 60),
-        color: COLORS_GLOW[Math.floor(Math.random()*COLORS_GLOW.length)],
+        color,
         prog: 0,
         alpha: 1,
       });
       window.dispatchEvent(new CustomEvent("aegis_attack", {
-        detail: { origin: a.name, target: b.name },
+        detail: { origin: a.name, target: b.name, color },
       }));
     }
 
@@ -393,8 +392,8 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
 
     function draw(now: number) {
       if (W === 0 || H === 0) { 
-        requestAnimationFrame(draw); 
-        return; 
+        rafId = requestAnimationFrame(draw);
+        return;
       }
 
       const focus = focusRef.current;
@@ -450,7 +449,8 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
             first = true; 
             continue; 
           }
-          first ? ctx.moveTo(p.sx, p.sy) : ctx.lineTo(p.sx, p.sy);
+          if (first) ctx.moveTo(p.sx, p.sy);
+          else ctx.lineTo(p.sx, p.sy);
           first = false;
         }
         ctx.stroke();
@@ -466,7 +466,8 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
             first = true; 
             continue; 
           }
-          first ? ctx.moveTo(p.sx, p.sy) : ctx.lineTo(p.sx, p.sy);
+          if (first) ctx.moveTo(p.sx, p.sy);
+          else ctx.lineTo(p.sx, p.sy);
           first = false;
         }
         ctx.stroke();
@@ -593,12 +594,13 @@ export default function CyberGlobeBackground({ isFocusMode = false }: Background
         ctx.fillText("// DRAG TO ROTATE", 16, H - 16);
       }
 
-      requestAnimationFrame(draw);
+      rafId = requestAnimationFrame(draw);
     }
 
-    requestAnimationFrame(draw);
+    rafId = requestAnimationFrame(draw);
 
     return () => {
+      cancelAnimationFrame(rafId);
       ro.disconnect();
       canvas.removeEventListener("mousedown",  onDown);
       canvas.removeEventListener("mousemove",  onMove);

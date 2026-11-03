@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
-
 import {
+  type LucideIcon,
   Shield,
   Activity,
   Radar,
@@ -14,8 +13,8 @@ import {
 
 type NavItem = {
   label: string;
-  href: string; // Voltamos para o href original para navegar pelas páginas
-  icon: any;
+  href: string;
+  icon: LucideIcon;
 };
 
 const navItems: NavItem[] = [
@@ -26,20 +25,8 @@ const navItems: NavItem[] = [
   { label: "SYS_SETTINGS", href: "/settings", icon: Settings },
 ];
 
-interface SidebarProps {
-  setActiveTab?: (tab: string) => void;
-}
-
-export default function Sidebar({ setActiveTab }: SidebarProps) {
-  const pathname = usePathname(); // Voltamos a ler a URL real do Next.js
-
-  // ⚡ SINCRO DOS MUNDOS: Sempre que a rota mudar, avisamos o page.tsx
-  // para o globo saber se entra em modo normal ou modo analytics expandido
-  useEffect(() => {
-    if (setActiveTab) {
-      setActiveTab(pathname);
-    }
-  }, [pathname, setActiveTab]);
+export default function Sidebar() {
+  const pathname = usePathname();
 
   const getClass = (path: string) => {
     const isCurrent = pathname === path;
@@ -51,7 +38,7 @@ export default function Sidebar({ setActiveTab }: SidebarProps) {
   };
 
   return (
-    <aside className="w-64 h-screen border-r border-zinc-900/80 bg-zinc-950/20 backdrop-blur-md p-6 flex flex-col justify-between relative select-none">
+    <aside className="w-full lg:w-64 shrink-0 lg:h-screen border-r border-zinc-900/80 bg-zinc-950/20 backdrop-blur-md p-6 flex flex-col justify-between gap-6 relative select-none">
       
       {/* Elemento estético: Linha laser sutil no canto extremo direito para separar a sidebar */}
       <div className="absolute top-0 right-0 w-[1px] h-32 bg-gradient-to-b from-cyan-500/30 to-transparent"></div>
@@ -63,13 +50,13 @@ export default function Sidebar({ setActiveTab }: SidebarProps) {
             <h1 className="text-xl font-black tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-r from-zinc-50 to-zinc-400 uppercase">
               AEGIS
             </h1>
-            <span className="text-[7px] text-cyan-500/70 bg-cyan-950/40 border border-cyan-800/30 px-1 py-0.2 rounded font-bold tracking-normal animate-pulse">
+            <span className="text-[7px] text-cyan-500/70 bg-cyan-950/40 border border-cyan-800/30 px-1 py-px rounded font-bold tracking-normal animate-pulse">
               v1.0.4
             </span>
           </div>
 
           <p className="text-[9px] text-zinc-600 mt-1 uppercase tracking-widest">
-            // THREAT_INTEL_GATEWAY
+            {"// THREAT_INTEL_GATEWAY"}
           </p>
         </div>
 

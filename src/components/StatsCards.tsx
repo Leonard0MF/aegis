@@ -14,8 +14,9 @@ interface StatsCardsProps {
 
 export default function StatsCards({ data, isLoading }: StatsCardsProps) {
   // Calcula quantos cabeçalhos de segurança reais foram validados
+  // (conta só os headers booleanos — o campo numérico "score" não entra)
   const detectedHeadersCount = data?.headers
-    ? Object.values(data.headers).filter(Boolean).length
+    ? [data.headers.csp, data.headers.hsts, data.headers.xFrameOptions].filter(Boolean).length
     : 0;
 
   // Estrutura os cards dinamicamente com base no estado do sistema
@@ -54,7 +55,7 @@ export default function StatsCards({ data, isLoading }: StatsCardsProps) {
           {/* Cabeçalho do Card */}
           <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
             <span className="font-mono text-[9px] font-black tracking-widest text-zinc-500 uppercase">
-              // {item.title}
+              {"// "}{item.title}
             </span>
             <span className={`w-1 h-1 rounded-full ${isLoading ? "bg-cyan-400 animate-ping" : item.isAlert ? "bg-rose-500 animate-pulse" : "bg-zinc-700"}`} />
           </div>
