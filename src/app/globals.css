@@ -58,6 +58,15 @@ body {
   scrollbar-color: var(--color-line-strong) transparent;
 }
 
+/* Fundo do app: petróleo com dois brilhos bem suaves (substitui o globo de fundo) */
+.app-bg {
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(900px 500px at 85% -10%, rgb(61 214 192 / 0.07), transparent 70%),
+    radial-gradient(700px 500px at -10% 110%, rgb(127 167 207 / 0.06), transparent 70%);
+  background-attachment: fixed;
+}
+
 /* Esconde a barra de rolagem (ex.: menu horizontal no mobile) mantendo o scroll */
 .no-scrollbar {
   scrollbar-width: none;

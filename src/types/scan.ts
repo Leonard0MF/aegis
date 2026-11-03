@@ -31,6 +31,29 @@ export interface DnsInfo {
   caa: string[];
 }
 
+export interface GeoLocation {
+  ip: string;
+  lat: number;
+  lon: number;
+  city: string;
+  region: string;
+  country: string;
+  countryCode: string;
+  org: string;
+  asn: number | null;
+  /** hostname associado (ex.: servidor MX) */
+  host?: string;
+}
+
+export interface GeoInfo {
+  /** servidores web do domínio */
+  servers: GeoLocation[];
+  /** servidores de e-mail (MX) */
+  mail: GeoLocation[];
+  /** de onde o AEGIS fez o scan */
+  origin: GeoLocation | null;
+}
+
 export interface ScanResult {
   domain: string;
   ip: string;
@@ -44,4 +67,6 @@ export interface ScanResult {
   tls: TlsInfo | null;
   dns: DnsInfo;
   checks: SecurityCheck[];
+  /** opcional: scans salvos antes da geolocalização não têm este campo */
+  geo?: GeoInfo;
 }

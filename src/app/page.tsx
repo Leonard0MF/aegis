@@ -6,16 +6,23 @@ import { Globe2, X } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import SecurityScore from "@/components/SecurityScore";
 import StatsCards from "@/components/StatsCards";
-import ThreatFeed from "@/components/ThreatFeed";
 import SecurityStatus from "@/components/SecurityStatus";
 import DomainScanner from "@/components/DomainScanner";
 import { DnsDetails, TlsDetails } from "@/components/ScanDetails";
-import CyberGlobeBackground from "@/components/backgrounds/Background";
+import ServerMap, { Legend, ServerList, scanKey } from "@/components/ServerMap";
+import Globe, { createCamera, type GlobeCamera } from "@/components/globe/Globe";
+import Panel from "@/components/ui/Panel";
 import { scanDomain } from "@/lib/services/scanner";
 import { getLastScan, saveScan } from "@/lib/storage/scanHistory";
 
 /** Alvo usado quando o AEGIS roda em localhost/IP e não há domínio próprio para se auto-diagnosticar. */
 const FALLBACK_TARGET = process.env.NEXT_PUBLIC_AEGIS_DEFAULT_TARGET || "github.com";
+
+const MAP_MS = 750;
+const MAP_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+type MapState = "closed" | "opening" | "open" | "closing";
+type Rect = { top: number; left: number; width: number; height: number };
 
 /** Domínio onde o AEGIS está hospedado, ou null se for localhost / IP / host interno. */
 function selfDomain(): string | null {
@@ -28,11 +35,67 @@ function selfDomain(): string | null {
 
 export default function Home() {
   const [loading, setLoading]       = useState(false);
-  const [isFocusMode, setFocusMode] = useState(false);
+  const [mapState, setMapState]     = useState<MapState>("closed");
+  const [overlayRect, setOverlayRect] = useState<Rect | null>(null); // null = tela cheia
   const [error, setError]           = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [isSelfScan, setIsSelfScan] = useState(false);
   const booted = useRef(false);
+  const slotRef = useRef<HTMLDivElement>(null);
+  const camera = useRef<GlobeCamera>(createCamera()); // rotação compartilhada: painel ↔ tela cheia
+  const mapTimer = useRef<number | undefined>(undefined);
+
+  const slotRect = (): Rect | null => {
+    const r = slotRef.current?.getBoundingClientRect();
+    return r && r.width > 0 ? { top: r.top, left: r.left, width: r.width, height: r.height } : null;
+  };
+  const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const openMap = useCallback(() => {
+    window.clearTimeout(mapTimer.current);
+    const from = slotRect();
+    if (!from || reducedMotion()) {
+      setOverlayRect(null);
+      setMapState("open");
+      return;
+    }
+    // começa exatamente em cima do globo do painel e, no frame seguinte, anima até a tela cheia
+    setOverlayRect(from);
+    setMapState("opening");
+    requestAnimationFrame(() => requestAnimationFrame(() => setOverlayRect(null)));
+    mapTimer.current = window.setTimeout(() => setMapState("open"), MAP_MS);
+  }, []);
+
+  const closeMap = useCallback(() => {
+    window.clearTimeout(mapTimer.current);
+    const to = slotRect();
+    if (!to || reducedMotion()) {
+      setMapState("closed");
+      return;
+    }
+    setMapState("closing");
+    setOverlayRect(to);
+    mapTimer.current = window.setTimeout(() => {
+      setMapState("closed");
+      setOverlayRect(null);
+    }, MAP_MS);
+  }, []);
+
+  // Esc fecha o mapa; trava a rolagem da página enquanto ele está aberto
+  useEffect(() => {
+    if (mapState === "closed") return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeMap();
+    window.addEventListener("keydown", onKey);
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    html.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      html.style.overflow = prev;
+    };
+  }, [mapState, closeMap]);
+
+  useEffect(() => () => window.clearTimeout(mapTimer.current), []);
 
   const runScan = useCallback(async (domain: string, self = false) => {
     if (!domain) return;
@@ -64,19 +127,39 @@ export default function Home() {
     void runScan(self ?? FALLBACK_TARGET, self !== null);
   }, [runScan]);
 
-  return (
-    <main className="min-h-dvh relative bg-canvas lg:h-dvh lg:overflow-hidden">
-      <CyberGlobeBackground isFocusMode={isFocusMode} />
+  const mapActive = mapState === "opening" || mapState === "open"; // painel some / mapa em foco
+  const dataKey = loading ? "loading" : scanResult ? scanKey(scanResult) : "empty";
 
-      {/* No modo globo, os cliques passam para o canvas (arrastar) */}
-      <div className={`flex flex-col lg:flex-row relative z-10 lg:h-dvh ${isFocusMode ? "h-dvh pointer-events-none" : ""}`}>
-        {!isFocusMode && <Sidebar />}
+  return (
+    <main className="app-bg min-h-dvh relative lg:h-dvh lg:overflow-hidden">
+      {/* Modo mapa: o globo sai do painel e cresce até a tela cheia (e volta ao fechar) */}
+      {mapState !== "closed" && (
+        <div
+          className="fixed z-20"
+          style={{
+            ...(overlayRect ?? { top: 0, left: 0, width: "100vw", height: "100dvh" }),
+            transition: `top ${MAP_MS}ms ${MAP_EASE}, left ${MAP_MS}ms ${MAP_EASE}, width ${MAP_MS}ms ${MAP_EASE}, height ${MAP_MS}ms ${MAP_EASE}`,
+          }}
+        >
+          <Globe
+            geo={loading ? undefined : scanResult?.geo}
+            focusKey={dataKey}
+            camera={camera}
+            traffic="high"
+            touchAction="none"
+            className="h-full w-full"
+          />
+        </div>
+      )}
+
+      <div className="flex flex-col lg:flex-row lg:h-dvh">
+        <Sidebar className={`transition-opacity duration-500 ${mapActive ? "opacity-0 pointer-events-none" : ""}`} />
 
         <section className="flex-1 min-h-0 min-w-0 flex flex-col px-4 py-5 md:px-8 md:py-6 lg:overflow-hidden">
-          <header className="pointer-events-auto flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5 md:mb-6">
+          <header className="relative z-30 flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5 md:mb-6">
             <div className="min-w-0">
               <h1 className="text-xl font-semibold tracking-tight text-fg">
-                {isFocusMode ? "Mapa global" : "Visão geral"}
+                {mapActive ? "Mapa global" : "Visão geral"}
               </h1>
               <p className="text-sm text-muted mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                 {error ? (
@@ -110,50 +193,74 @@ export default function Home() {
               </div>
               <button
                 type="button"
-                onClick={() => setFocusMode((f) => !f)}
-                aria-label={isFocusMode ? "Fechar mapa" : "Abrir mapa"}
-                className="pointer-events-auto shrink-0 inline-flex items-center gap-2 rounded-xl border border-line bg-panel/90 px-3 sm:px-3.5 py-2.5 text-sm text-muted hover:text-fg hover:border-line-strong transition-colors whitespace-nowrap"
+                onClick={mapActive ? closeMap : openMap}
+                aria-label={mapActive ? "Fechar mapa" : "Abrir mapa"}
+                aria-pressed={mapActive}
+                className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-line bg-panel/90 px-3 sm:px-3.5 py-2.5 text-sm text-muted hover:text-fg hover:border-line-strong transition-colors whitespace-nowrap"
               >
-                {isFocusMode ? <X size={16} /> : <Globe2 size={16} />}
-                <span className="hidden sm:inline">{isFocusMode ? "Fechar mapa" : "Mapa"}</span>
+                {mapActive ? <X size={16} /> : <Globe2 size={16} />}
+                <span className="hidden sm:inline">{mapActive ? "Fechar mapa" : "Mapa"}</span>
               </button>
             </div>
           </header>
 
-          {!isFocusMode ? (
-            <div className="space-y-4 pb-6 animate-fade-in lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:-mr-2 lg:pr-2">
-              <StatsCards data={scanResult ?? undefined} isLoading={loading} />
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Coluna esquerda: define a altura da linha */}
-                  <div className="space-y-4 min-w-0">
-                    <SecurityScore score={scanResult?.score} grade={scanResult?.grade} isLoading={loading} />
-                    <TlsDetails data={scanResult ?? undefined} isLoading={loading} />
-                    <DnsDetails data={scanResult ?? undefined} isLoading={loading} />
-                  </div>
-                  {/* Coluna direita: no desktop acompanha a altura da esquerda e rola por dentro */}
-                  <div className="relative min-w-0 md:min-h-[500px]">
-                    <SecurityStatus
-                      checks={scanResult?.checks}
-                      isLoading={loading}
-                      className="md:absolute md:inset-0"
-                    />
-                  </div>
+          {/* O painel continua montado (só some) para o globo saber para onde voltar ao fechar o mapa */}
+          <div
+            aria-hidden={mapActive}
+            className={`space-y-4 pb-6 transition-opacity duration-500 lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:-mr-2 lg:pr-2 ${
+              mapActive ? "opacity-0 pointer-events-none" : ""
+            }`}
+          >
+            <StatsCards data={scanResult ?? undefined} isLoading={loading} />
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Coluna esquerda: define a altura da linha */}
+                <div className="space-y-4 min-w-0">
+                  <SecurityScore score={scanResult?.score} grade={scanResult?.grade} isLoading={loading} />
+                  <TlsDetails data={scanResult ?? undefined} isLoading={loading} />
+                  <DnsDetails data={scanResult ?? undefined} isLoading={loading} />
                 </div>
-                <div className="relative min-w-0 h-[420px] xl:h-auto">
-                  <ThreatFeed isLoading={loading} className="h-full xl:absolute xl:inset-0" />
+                {/* Coluna direita: no desktop acompanha a altura da esquerda e rola por dentro */}
+                <div className="relative min-w-0 md:min-h-[500px]">
+                  <SecurityStatus
+                    checks={scanResult?.checks}
+                    isLoading={loading}
+                    className="md:absolute md:inset-0"
+                  />
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex-1 min-h-0 flex items-end justify-end animate-fade-in">
-              <div className="pointer-events-auto w-full sm:max-w-sm h-[300px] sm:h-[420px]">
-                <ThreatFeed isLoading={false} className="h-full" />
+              <div className="min-w-0">
+                <ServerMap
+                  data={scanResult ?? undefined}
+                  isLoading={loading}
+                  slotRef={slotRef}
+                  camera={camera}
+                  globeHidden={mapState !== "closed"}
+                />
               </div>
             </div>
-          )}
+          </div>
         </section>
       </div>
+
+      {/* Lista de servidores flutuante (só depois que o globo terminou de crescer) */}
+      {mapState === "open" && (
+        <div className="fixed z-30 bottom-4 right-4 left-4 sm:left-auto sm:w-96 max-h-[45dvh] flex animate-fade-in">
+          <Panel
+            title={scanResult ? scanResult.domain : "Mapa global"}
+            subtitle="Arraste para girar · Esc para fechar"
+            className="w-full bg-panel/95"
+            bodyClassName="overflow-y-auto space-y-3"
+          >
+            <Legend />
+            {scanResult?.geo ? (
+              <ServerList geo={scanResult.geo} />
+            ) : (
+              <p className="text-sm text-dim">Faça um scan para ver os servidores no mapa.</p>
+            )}
+          </Panel>
+        </div>
+      )}
     </main>
   );
 }

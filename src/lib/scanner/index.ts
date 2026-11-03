@@ -1,6 +1,7 @@
 import type { ScanResult } from "@/types/scan";
 import { buildChecks, computeScore } from "./checks";
 import { inspectDns } from "./dns";
+import { inspectGeo, locateServers } from "./geo";
 import { fetchFollowing, probeHttpRedirect } from "./http";
 import { inspectTls } from "./tls";
 
@@ -14,11 +15,17 @@ export class ScanError extends Error {
 export async function runScan(domain: string, ips: string[]): Promise<ScanResult> {
   const started = Date.now();
 
-  const [tls, httpsProbe, httpRedirect, dnsInfo] = await Promise.all([
+  // geolocalização dos IPs começa já; a dos MX depende do DNS
+  const serversGeo = locateServers(ips);
+  const dnsP = inspectDns(domain);
+  const geoP = dnsP.then((d) => inspectGeo(serversGeo, d.mx));
+
+  const [tls, httpsProbe, httpRedirect, dnsInfo, geo] = await Promise.all([
     inspectTls(ips[0], domain),
     fetchFollowing(`https://${domain}/`),
     probeHttpRedirect(domain),
-    inspectDns(domain),
+    dnsP,
+    geoP,
   ]);
 
   // Sem HTTPS, avalia os headers que o HTTP devolver
@@ -50,5 +57,6 @@ export async function runScan(domain: string, ips: string[]): Promise<ScanResult
     tls,
     dns: dnsInfo,
     checks,
+    geo,
   };
 }
