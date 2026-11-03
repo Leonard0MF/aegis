@@ -49,10 +49,13 @@ export default function StatsCards({ data, isLoading }: StatsCardsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {stats.map(({ title, value, unit, sub, tone, icon: Icon }) => (
-        <div key={title} className="rounded-2xl border border-line bg-panel/90 p-5 flex gap-4 items-start">
-          <span className={`rounded-xl p-2.5 ${TONE[tone].icon}`}>
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+      {stats.map(({ title, value, unit, sub, tone, icon: Icon }, i) => (
+        <div
+          key={title}
+          className={`rounded-2xl border border-line bg-panel/90 p-4 sm:p-5 flex gap-4 items-start min-w-0 ${i === 2 ? "col-span-2 md:col-span-1" : ""}`}
+        >
+          <span className={`hidden sm:inline-flex rounded-xl p-2.5 ${TONE[tone].icon}`}>
             <Icon size={18} strokeWidth={1.75} />
           </span>
           <div className="min-w-0 flex-1">
@@ -62,7 +65,7 @@ export default function StatsCards({ data, isLoading }: StatsCardsProps) {
             ) : (
               <p
                 className={`mt-1 font-mono font-medium tracking-tight tabular-nums truncate ${TONE[tone].text} ${
-                  value.length > 12 ? "text-lg leading-8" : "text-3xl"
+                  value.length > 12 ? "text-base sm:text-lg leading-8" : "text-2xl sm:text-3xl"
                 }`}
                 title={value}
               >

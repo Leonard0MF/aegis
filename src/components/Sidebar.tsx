@@ -30,7 +30,7 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-full lg:w-60 shrink-0 lg:h-screen border-b lg:border-b-0 lg:border-r border-line bg-panel/80 px-4 py-5 flex flex-col gap-8 select-none">
+    <aside className="w-full lg:w-60 shrink-0 lg:h-dvh border-b lg:border-b-0 lg:border-r border-line bg-panel/80 px-4 pt-4 pb-2 lg:py-5 flex flex-col gap-3 lg:gap-8 select-none">
       <Link href="/" className="flex items-center gap-2.5 px-2">
         <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent/15 text-accent ring-1 ring-inset ring-accent/25">
           <Shield size={16} strokeWidth={2} />
@@ -41,7 +41,7 @@ export default function Sidebar() {
         </span>
       </Link>
 
-      <nav className="flex lg:flex-col gap-1 overflow-x-auto">
+      <nav className="no-scrollbar -mx-4 px-4 lg:mx-0 lg:px-0 flex lg:flex-col gap-1 overflow-x-auto">
         {navItems.map(({ label, href, icon: Icon }) => {
           const active = pathname === href;
           return (
@@ -49,7 +49,7 @@ export default function Sidebar() {
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm whitespace-nowrap transition-colors ${
+              className={`flex shrink-0 items-center gap-2 lg:gap-3 rounded-lg px-3 py-1.5 lg:py-2 text-[13px] lg:text-sm whitespace-nowrap transition-colors ${
                 active
                   ? "bg-panel-2 text-fg ring-1 ring-inset ring-line-strong"
                   : "text-muted hover:text-fg hover:bg-panel-2/60"

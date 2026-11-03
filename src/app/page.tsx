@@ -9,7 +9,7 @@ import StatsCards from "@/components/StatsCards";
 import ThreatFeed from "@/components/ThreatFeed";
 import SecurityStatus from "@/components/SecurityStatus";
 import DomainScanner from "@/components/DomainScanner";
-import ScanDetails from "@/components/ScanDetails";
+import { DnsDetails, TlsDetails } from "@/components/ScanDetails";
 import CyberGlobeBackground from "@/components/backgrounds/Background";
 import { scanDomain } from "@/lib/services/scanner";
 import { getLastScan, saveScan } from "@/lib/storage/scanHistory";
@@ -65,20 +65,20 @@ export default function Home() {
   }, [runScan]);
 
   return (
-    <main className="min-h-screen relative overflow-hidden bg-canvas">
+    <main className="min-h-dvh relative bg-canvas lg:h-dvh lg:overflow-hidden">
       <CyberGlobeBackground isFocusMode={isFocusMode} />
 
       {/* No modo globo, os cliques passam para o canvas (arrastar) */}
-      <div className={`flex flex-col lg:flex-row h-screen relative z-10 ${isFocusMode ? "pointer-events-none" : ""}`}>
+      <div className={`flex flex-col lg:flex-row relative z-10 lg:h-dvh ${isFocusMode ? "h-dvh pointer-events-none" : ""}`}>
         {!isFocusMode && <Sidebar />}
 
-        <section className="flex-1 min-h-0 flex flex-col px-4 py-5 md:px-8 md:py-6 overflow-hidden">
-          <header className="pointer-events-auto flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <section className="flex-1 min-h-0 min-w-0 flex flex-col px-4 py-5 md:px-8 md:py-6 lg:overflow-hidden">
+          <header className="pointer-events-auto flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5 md:mb-6">
             <div className="min-w-0">
               <h1 className="text-xl font-semibold tracking-tight text-fg">
                 {isFocusMode ? "Mapa global" : "Visão geral"}
               </h1>
-              <p className="text-sm text-muted mt-0.5 truncate">
+              <p className="text-sm text-muted mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                 {error ? (
                   <span role="alert" className="text-bad">Erro: {error}</span>
                 ) : loading ? (
@@ -87,11 +87,11 @@ export default function Home() {
                   <>
                     <span className="text-fg">{scanResult.domain}</span>
                     {isSelfScan && (
-                      <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] text-accent ring-1 ring-inset ring-accent/20">
+                      <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] text-accent ring-1 ring-inset ring-accent/20">
                         auto-diagnóstico
                       </span>
                     )}
-                    <span className="text-dim"> · {new Date(scanResult.scannedAt).toLocaleString("pt-BR")}</span>
+                    <span className="text-dim">{new Date(scanResult.scannedAt).toLocaleString("pt-BR")}</span>
                   </>
                 ) : (
                   "Nenhum scan ainda"
@@ -99,8 +99,8 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="flex-1 md:w-[26rem]">
+            <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto">
+              <div className="flex-1 min-w-0 lg:w-[26rem]">
                 <DomainScanner
                   key={scanResult?.domain ?? "empty"}
                   initialValue={scanResult?.domain ?? ""}
@@ -111,31 +111,43 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setFocusMode((f) => !f)}
-                className="inline-flex items-center gap-2 rounded-xl border border-line bg-panel/90 px-3.5 py-2.5 text-sm text-muted hover:text-fg hover:border-line-strong transition-colors whitespace-nowrap"
+                aria-label={isFocusMode ? "Fechar mapa" : "Abrir mapa"}
+                className="pointer-events-auto shrink-0 inline-flex items-center gap-2 rounded-xl border border-line bg-panel/90 px-3 sm:px-3.5 py-2.5 text-sm text-muted hover:text-fg hover:border-line-strong transition-colors whitespace-nowrap"
               >
                 {isFocusMode ? <X size={16} /> : <Globe2 size={16} />}
-                {isFocusMode ? "Fechar mapa" : "Mapa"}
+                <span className="hidden sm:inline">{isFocusMode ? "Fechar mapa" : "Mapa"}</span>
               </button>
             </div>
           </header>
 
           {!isFocusMode ? (
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-4 -mr-2 pr-2 animate-fade-in">
+            <div className="space-y-4 pb-6 animate-fade-in lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:-mr-2 lg:pr-2">
               <StatsCards data={scanResult ?? undefined} isLoading={loading} />
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <div className="xl:col-span-2 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Coluna esquerda: define a altura da linha */}
+                  <div className="space-y-4 min-w-0">
                     <SecurityScore score={scanResult?.score} grade={scanResult?.grade} isLoading={loading} />
-                    <SecurityStatus checks={scanResult?.checks} isLoading={loading} />
+                    <TlsDetails data={scanResult ?? undefined} isLoading={loading} />
+                    <DnsDetails data={scanResult ?? undefined} isLoading={loading} />
                   </div>
-                  <ScanDetails data={scanResult ?? undefined} isLoading={loading} />
+                  {/* Coluna direita: no desktop acompanha a altura da esquerda e rola por dentro */}
+                  <div className="relative min-w-0 md:min-h-[500px]">
+                    <SecurityStatus
+                      checks={scanResult?.checks}
+                      isLoading={loading}
+                      className="md:absolute md:inset-0"
+                    />
+                  </div>
                 </div>
-                <ThreatFeed isLoading={loading} className="max-h-[720px]" />
+                <div className="relative min-w-0 h-[420px] xl:h-auto">
+                  <ThreatFeed isLoading={loading} className="h-full xl:absolute xl:inset-0" />
+                </div>
               </div>
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex items-end justify-end animate-fade-in">
-              <div className="pointer-events-auto w-full max-w-sm h-[420px]">
+              <div className="pointer-events-auto w-full sm:max-w-sm h-[300px] sm:h-[420px]">
                 <ThreatFeed isLoading={false} className="h-full" />
               </div>
             </div>

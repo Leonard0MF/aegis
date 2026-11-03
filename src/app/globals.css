@@ -58,6 +58,14 @@ body {
   scrollbar-color: var(--color-line-strong) transparent;
 }
 
+/* Esconde a barra de rolagem (ex.: menu horizontal no mobile) mantendo o scroll */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 ::selection {
   background: color-mix(in oklab, var(--color-accent) 35%, transparent);
 }

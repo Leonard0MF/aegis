@@ -64,7 +64,7 @@ export default function ThreatFeed({ isLoading, className = "" }: ThreatFeedProp
           ao vivo
         </span>
       }
-      className={`min-h-[440px] ${className}`}
+      className={className}
       bodyClassName="overflow-y-auto"
     >
       {isLoading && feed.length === 0 ? (

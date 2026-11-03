@@ -7,6 +7,7 @@ import StatusBadge from "@/components/ui/StatusBadge";
 interface SecurityStatusProps {
   checks?: SecurityCheck[];
   isLoading: boolean;
+  className?: string;
 }
 
 const CATEGORY_LABEL: Record<CheckCategory, string> = {
@@ -19,7 +20,7 @@ const CATEGORY_LABEL: Record<CheckCategory, string> = {
 
 const CATEGORY_ORDER: CheckCategory[] = ["tls", "transport", "headers", "cookies", "dns"];
 
-export default function SecurityStatus({ checks, isLoading }: SecurityStatusProps) {
+export default function SecurityStatus({ checks, isLoading, className = "" }: SecurityStatusProps) {
   const count = (s: SecurityCheck["status"]) => checks?.filter((c) => c.status === s).length ?? 0;
 
   return (
@@ -38,8 +39,8 @@ export default function SecurityStatus({ checks, isLoading }: SecurityStatusProp
           "TLS, transporte, headers, cookies e DNS"
         )
       }
-      className="max-h-[560px]"
-      bodyClassName="overflow-y-auto"
+      className={className}
+      bodyClassName="md:overflow-y-auto"
     >
       {isLoading ? (
         <div className="space-y-3 pt-1">

@@ -25,8 +25,8 @@ export default function SecurityScore({ score, grade, isLoading }: SecurityScore
 
   return (
     <Panel title="Pontuação de segurança" subtitle="Média ponderada de todos os checks">
-      <div className="flex items-center gap-6 pt-2">
-        <div className="relative h-32 w-32 shrink-0">
+      <div className="flex items-center gap-4 sm:gap-6 pt-2">
+        <div className="relative h-24 w-24 sm:h-32 sm:w-32 shrink-0">
           <svg viewBox="0 0 120 120" className={`h-full w-full -rotate-90 ${isLoading ? "animate-spin [animation-duration:2.5s]" : ""}`}>
             <circle cx="60" cy="60" r={R} fill="none" stroke="var(--color-line)" strokeWidth="8" />
             <circle
@@ -43,7 +43,7 @@ export default function SecurityScore({ score, grade, isLoading }: SecurityScore
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className={`text-4xl font-semibold tracking-tight ${t?.text ?? "text-dim"}`}>
+            <span className={`text-3xl sm:text-4xl font-semibold tracking-tight ${t?.text ?? "text-dim"}`}>
               {hasScore ? grade ?? "–" : "–"}
             </span>
             <span className="text-[11px] text-dim">nota</span>
@@ -51,7 +51,7 @@ export default function SecurityScore({ score, grade, isLoading }: SecurityScore
         </div>
 
         <div className="min-w-0">
-          <p className="font-mono text-5xl font-medium tracking-tight tabular-nums text-fg">
+          <p className="font-mono text-4xl sm:text-5xl font-medium tracking-tight tabular-nums text-fg">
             {hasScore ? score : isLoading ? "…" : "–"}
             <span className="text-base text-dim font-sans font-normal ml-1">/100</span>
           </p>

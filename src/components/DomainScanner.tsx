@@ -28,7 +28,7 @@ export default function DomainScanner({ onScan, isLoading, initialValue = "" }: 
           autoComplete="off"
           spellCheck={false}
           aria-label="Domínio para escanear"
-          placeholder="Escanear um domínio, ex.: github.com"
+          placeholder="ex.: github.com"
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
           disabled={isLoading}
@@ -37,7 +37,7 @@ export default function DomainScanner({ onScan, isLoading, initialValue = "" }: 
         <button
           type="submit"
           disabled={isLoading || !domain.trim()}
-          className="shrink-0 rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-canvas transition hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none"
+          className="shrink-0 rounded-lg bg-accent px-3 sm:px-4 py-1.5 text-sm font-medium text-canvas transition hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none"
         >
           {isLoading ? "Escaneando…" : "Escanear"}
         </button>
