@@ -1,5 +1,5 @@
-import ComingSoon from "@/components/ui/ComingSoon";
+import ThreatsView from "@/components/threats/ThreatsView";
 
 export default function ThreatFeedPage() {
-  return <ComingSoon title="Ameaças" description="Indicadores de ameaça de fontes públicas." />;
+  return <ThreatsView />;
 }

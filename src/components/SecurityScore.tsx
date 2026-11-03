@@ -2,29 +2,26 @@
 
 import type { Grade } from "@/types/scan";
 import Panel from "@/components/ui/Panel";
+import { scoreTier } from "@/lib/assets";
 
 interface SecurityScoreProps {
   score?: number;
   grade?: Grade;
   isLoading: boolean;
+  /** achado grave que limitou a nota */
+  capReason?: string;
 }
 
 const R = 52;
 const CIRC = 2 * Math.PI * R;
 
-function tier(score: number) {
-  if (score >= 80) return { label: "Postura excelente", color: "var(--color-ok)", text: "text-ok" };
-  if (score >= 50) return { label: "Postura moderada", color: "var(--color-warn)", text: "text-warn" };
-  return { label: "Postura fraca", color: "var(--color-bad)", text: "text-bad" };
-}
-
-export default function SecurityScore({ score, grade, isLoading }: SecurityScoreProps) {
+export default function SecurityScore({ score, grade, isLoading, capReason }: SecurityScoreProps) {
   const hasScore = score != null && !isLoading;
-  const t = hasScore ? tier(score) : null;
+  const t = hasScore ? scoreTier(score) : null;
   const offset = hasScore ? CIRC * (1 - score / 100) : CIRC;
 
   return (
-    <Panel title="Pontuação de segurança" subtitle="Média ponderada de todos os checks">
+    <Panel title="Pontuação de segurança" subtitle="Média ponderada · achados graves limitam a nota">
       <div className="flex items-center gap-4 sm:gap-6 pt-2">
         <div className="relative h-24 w-24 sm:h-32 sm:w-32 shrink-0">
           <svg viewBox="0 0 120 120" className={`h-full w-full -rotate-90 ${isLoading ? "animate-spin [animation-duration:2.5s]" : ""}`}>
@@ -58,6 +55,11 @@ export default function SecurityScore({ score, grade, isLoading }: SecurityScore
           <p className={`mt-2 text-sm ${t?.text ?? "text-muted"}`}>
             {isLoading ? "Calculando…" : t?.label ?? "Aguardando o primeiro scan"}
           </p>
+          {hasScore && capReason && (
+            <p className="mt-1.5 text-xs text-bad/90 leading-snug">
+              Nota limitada por achado grave: <span className="text-fg/90">{capReason}</span>
+            </p>
+          )}
         </div>
       </div>
     </Panel>

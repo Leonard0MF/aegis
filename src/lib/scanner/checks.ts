@@ -2,7 +2,6 @@ import type {
   CheckCategory,
   CheckStatus,
   DnsInfo,
-  Grade,
   SecurityCheck,
   TlsInfo,
 } from "@/types/scan";
@@ -18,15 +17,16 @@ export interface CheckInput {
 
 const HALF_YEAR_S = 15_552_000;
 
-function check(
+export function check(
   id: string,
   category: CheckCategory,
   label: string,
   weight: number,
   status: CheckStatus,
   detail: string,
+  cap?: number,
 ): SecurityCheck {
-  return { id, category, label, weight, status, detail };
+  return cap === undefined ? { id, category, label, weight, status, detail } : { id, category, label, weight, status, detail, cap };
 }
 
 function tlsChecks(t: TlsInfo | null): SecurityCheck[] {
@@ -55,6 +55,58 @@ function tlsChecks(t: TlsInfo | null): SecurityCheck[] {
   out.push(
     check("tls-protocol", "tls", "Versão do protocolo TLS", 5, modern ? "pass" : "fail", `Negociado: ${t.protocol}`),
   );
+
+  if (t.versions) {
+    const legacy = t.versions.filter((v) => v.supported && (v.version === "TLSv1" || v.version === "TLSv1.1"));
+    const has13 = t.versions.some((v) => v.version === "TLSv1.3" && v.supported);
+    out.push(
+      check(
+        "tls-legacy", "tls", "Versões antigas de TLS desativadas", 6,
+        legacy.length ? "fail" : "pass",
+        legacy.length
+          ? `Ainda aceita ${legacy.map((v) => (v.version === "TLSv1" ? "TLS 1.0" : "TLS 1.1")).join(" e ")} (vulneráveis a BEAST/POODLE, proibidas pelo PCI DSS)`
+          : "TLS 1.0 e 1.1 recusados",
+      ),
+      check(
+        "tls-13", "tls", "Suporte a TLS 1.3", 2,
+        has13 ? "pass" : "warn",
+        has13 ? "TLS 1.3 disponível" : "TLS 1.3 não suportado (handshake mais lento, sem forward secrecy obrigatório)",
+      ),
+    );
+    const weak = t.versions.find((v) => v.cipher && /RC4|3DES|DES-CBC|NULL|EXPORT|MD5/i.test(v.cipher));
+    if (weak) {
+      out.push(check("tls-weak-cipher", "tls", "Cifras fracas", 6, "fail", `Aceita ${weak.cipher} em ${weak.version}`));
+    }
+  }
+
+  if (t.keyBits && t.keyType) {
+    const weakKey = (t.keyType === "RSA" && t.keyBits < 2048) || (t.keyType === "EC" && t.keyBits < 256);
+    out.push(
+      check(
+        "tls-key", "tls", "Chave do certificado", 4,
+        weakKey ? "fail" : "pass",
+        `${t.keyType} ${t.keyBits} bits${weakKey ? " (fraca: o mínimo é RSA 2048 / EC 256)" : ""}`,
+      ),
+    );
+  }
+  if (t.signatureAlgorithm) {
+    const weakSig = /sha1|md5/i.test(t.signatureAlgorithm);
+    out.push(
+      check(
+        "tls-sig", "tls", "Algoritmo de assinatura", 3,
+        weakSig ? "fail" : "pass",
+        weakSig ? `${t.signatureAlgorithm} (obsoleto, sujeito a colisões)` : t.signatureAlgorithm,
+      ),
+    );
+  }
+  if (t.ocspStapled !== undefined) {
+    out.push(
+      check(
+        "tls-ocsp", "tls", "OCSP stapling", 0, "info",
+        t.ocspStapled ? "Ativo (revogação verificada sem consultar a CA)" : "Inativo",
+      ),
+    );
+  }
   return out;
 }
 
@@ -194,21 +246,11 @@ function cookieChecks(h: Headers | null): SecurityCheck[] {
 }
 
 function dnsChecks(d: DnsInfo): SecurityCheck[] {
-  const dmarcPolicy = /;\s*p\s*=\s*(\w+)/i.exec(d.dmarc ?? "")?.[1]?.toLowerCase();
   return [
     check(
-      "spf", "dns", "SPF", 4,
-      d.spf ? (/\+all\b/i.test(d.spf) ? "fail" : "pass") : "fail",
-      d.spf ? (/\+all\b/i.test(d.spf) ? "SPF com +all (aceita qualquer remetente)" : d.spf) : "Sem registro SPF (spoofing de e-mail)",
-    ),
-    check(
-      "dmarc", "dns", "DMARC", 5,
-      !d.dmarc ? "fail" : dmarcPolicy === "none" ? "warn" : "pass",
-      !d.dmarc ? "Sem registro DMARC" : `Política: p=${dmarcPolicy ?? "?"}`,
-    ),
-    check(
-      "caa", "dns", "CAA", 0, "info",
-      d.caa.length ? `CAs autorizadas: ${d.caa.join(", ")}` : "Sem CAA (qualquer CA pode emitir)",
+      "caa", "dns", "CAA", 2,
+      d.caa.length ? "pass" : "warn",
+      d.caa.length ? `CAs autorizadas: ${[...new Set(d.caa)].join(", ")}` : "Sem CAA: qualquer autoridade pode emitir certificado para o domínio",
     ),
   ];
 }
@@ -221,19 +263,4 @@ export function buildChecks(i: CheckInput): SecurityCheck[] {
     ...cookieChecks(i.headers),
     ...dnsChecks(i.dns),
   ];
-}
-
-export function computeScore(checks: SecurityCheck[]): { score: number; grade: Grade } {
-  let total = 0;
-  let earned = 0;
-  for (const c of checks) {
-    if (c.status === "info" || c.weight === 0) continue;
-    total += c.weight;
-    if (c.status === "pass") earned += c.weight;
-    else if (c.status === "warn") earned += c.weight / 2;
-  }
-  const score = total === 0 ? 0 : Math.round((earned / total) * 100);
-  const grade: Grade =
-    score >= 90 ? "A" : score >= 80 ? "B" : score >= 65 ? "C" : score >= 50 ? "D" : "F";
-  return { score, grade };
 }

@@ -15,10 +15,17 @@ const CATEGORY_LABEL: Record<CheckCategory, string> = {
   transport: "Transporte",
   headers: "Headers HTTP",
   cookies: "Cookies",
-  dns: "DNS e e-mail",
+  dns: "DNS",
+  email: "E-mail",
+  vulns: "Vulnerabilidades",
+  reputation: "Reputação",
+  surface: "Superfície de ataque",
+  exposure: "Exposição (testes ativos)",
 };
 
-const CATEGORY_ORDER: CheckCategory[] = ["tls", "transport", "headers", "cookies", "dns"];
+const CATEGORY_ORDER: CheckCategory[] = [
+  "exposure", "vulns", "surface", "reputation", "tls", "transport", "headers", "cookies", "email", "dns",
+];
 
 export default function SecurityStatus({ checks, isLoading, className = "" }: SecurityStatusProps) {
   const count = (s: SecurityCheck["status"]) => checks?.filter((c) => c.status === s).length ?? 0;
@@ -36,7 +43,7 @@ export default function SecurityStatus({ checks, isLoading, className = "" }: Se
             <span className="text-bad">{count("fail")} falhas</span>
           </span>
         ) : (
-          "TLS, transporte, headers, cookies e DNS"
+          "TLS, headers, e-mail, CVEs e reputação"
         )
       }
       className={className}

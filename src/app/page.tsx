@@ -1,6 +1,6 @@
 "use client";
 
-import type { ScanResult } from "@/types/scan";
+import type { ActiveInfo, ScanResult, SecurityCheck } from "@/types/scan";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Globe2, X } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
@@ -12,8 +12,13 @@ import { DnsDetails, TlsDetails } from "@/components/ScanDetails";
 import ServerMap, { Legend, ServerList, scanKey } from "@/components/ServerMap";
 import Globe, { createCamera, type GlobeCamera } from "@/components/globe/Globe";
 import Panel from "@/components/ui/Panel";
-import { scanDomain } from "@/lib/services/scanner";
-import { getLastScan, saveScan } from "@/lib/storage/scanHistory";
+import VulnsPanel from "@/components/deep/VulnsPanel";
+import SurfacePanel from "@/components/deep/SurfacePanel";
+import ReputationPanel from "@/components/deep/ReputationPanel";
+import ActivePanel from "@/components/deep/ActivePanel";
+import { scanDomain, scanSurface } from "@/lib/services/scanner";
+import { mergeChecks } from "@/lib/scoring";
+import { getLastScan, getLatestFor, saveScan } from "@/lib/storage/scanHistory";
 
 /** Alvo usado quando o AEGIS roda em localhost/IP e não há domínio próprio para se auto-diagnosticar. */
 const FALLBACK_TARGET = process.env.NEXT_PUBLIC_AEGIS_DEFAULT_TARGET || "github.com";
@@ -44,6 +49,54 @@ export default function Home() {
   const slotRef = useRef<HTMLDivElement>(null);
   const camera = useRef<GlobeCamera>(createCamera()); // rotação compartilhada: painel ↔ tela cheia
   const mapTimer = useRef<number | undefined>(undefined);
+  const [surfaceRunning, setSurfaceRunning] = useState(false);
+  const [surfaceError, setSurfaceError] = useState<string | null>(null);
+  /** scan exibido agora: etapas em segundo plano só aplicam o resultado se ele ainda for o mesmo */
+  const current = useRef<ScanResult | null>(null);
+
+  const show = useCallback((r: ScanResult | null) => {
+    current.current = r;
+    setScanResult(r);
+  }, []);
+
+  /** Aplica uma etapa posterior (superfície, testes ativos) ao scan exibido e salva no histórico. */
+  const patch = useCallback(
+    (forKey: string, update: (r: ScanResult) => ScanResult) => {
+      const r = current.current;
+      if (!r || scanKey(r) !== forKey) return; // o usuário já está vendo outro scan
+      const next = update(r);
+      show(next);
+      saveScan(next);
+    },
+    [show],
+  );
+
+  const runSurface = useCallback(
+    async (r: ScanResult) => {
+      const key = scanKey(r);
+      setSurfaceRunning(true);
+      setSurfaceError(null);
+      try {
+        const { surface, checks } = await scanSurface(r.domain);
+        patch(key, (cur) => mergeChecks(cur, ["surface"], checks, { surface }));
+      } catch (err) {
+        if (current.current && scanKey(current.current) === key) {
+          setSurfaceError(err instanceof Error ? err.message : "Falha ao mapear a superfície");
+        }
+      } finally {
+        setSurfaceRunning(false);
+      }
+    },
+    [patch],
+  );
+
+  const applyActive = useCallback(
+    (active: ActiveInfo, checks: SecurityCheck[]) => {
+      const r = current.current;
+      if (r) patch(scanKey(r), (cur) => mergeChecks(cur, ["exposure"], checks, { active }));
+    },
+    [patch],
+  );
 
   const slotRect = (): Rect | null => {
     const r = slotRef.current?.getBoundingClientRect();
@@ -101,31 +154,36 @@ export default function Home() {
     if (!domain) return;
     setLoading(true);
     setError(null);
+    setSurfaceError(null);
     try {
       const result = await scanDomain(domain);
-      setScanResult(result);
+      show(result);
       setIsSelfScan(self);
       saveScan(result);
+      setLoading(false);
+      void runSurface(result); // subdomínios demoram mais: chegam depois, sem travar o painel
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no scan");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [show, runSurface]);
 
   // Ao abrir: mostra o último scan salvo; sem histórico, faz o auto-diagnóstico do próprio domínio.
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
-    const last = getLastScan();
+    // /?d=dominio (vindo da página Ativos) abre o último scan salvo daquele domínio
+    const wanted = new URLSearchParams(window.location.search).get("d");
+    const last = (wanted && getLatestFor(wanted.toLowerCase())) || getLastScan();
     if (last) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- leitura única de storage externo
-      setScanResult(last);
+      show(last);
       return;
     }
     const self = selfDomain();
     void runScan(self ?? FALLBACK_TARGET, self !== null);
-  }, [runScan]);
+  }, [runScan, show]);
 
   const mapActive = mapState === "opening" || mapState === "open"; // painel some / mapa em foco
   const dataKey = loading ? "loading" : scanResult ? scanKey(scanResult) : "empty";
@@ -216,7 +274,12 @@ export default function Home() {
               <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Coluna esquerda: define a altura da linha */}
                 <div className="space-y-4 min-w-0">
-                  <SecurityScore score={scanResult?.score} grade={scanResult?.grade} isLoading={loading} />
+                  <SecurityScore
+                    score={scanResult?.score}
+                    grade={scanResult?.grade}
+                    capReason={scanResult?.capReason}
+                    isLoading={loading}
+                  />
                   <TlsDetails data={scanResult ?? undefined} isLoading={loading} />
                   <DnsDetails data={scanResult ?? undefined} isLoading={loading} />
                 </div>
@@ -237,6 +300,24 @@ export default function Home() {
                   camera={camera}
                   globeHidden={mapState !== "closed"}
                 />
+              </div>
+            </div>
+
+            {/* Análise aprofundada */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <div className="xl:col-span-2 space-y-4 min-w-0">
+                <VulnsPanel key={`v-${dataKey}`} data={scanResult ?? undefined} isLoading={loading} />
+                <SurfacePanel
+                  key={`s-${dataKey}`}
+                  data={loading ? undefined : scanResult ?? undefined}
+                  running={surfaceRunning}
+                  error={surfaceError}
+                  onRun={() => scanResult && void runSurface(scanResult)}
+                />
+              </div>
+              <div className="space-y-4 min-w-0">
+                <ActivePanel key={`a-${scanResult?.domain ?? ""}`} data={loading ? undefined : scanResult ?? undefined} onResult={applyActive} />
+                <ReputationPanel data={scanResult ?? undefined} isLoading={loading} />
               </div>
             </div>
           </div>

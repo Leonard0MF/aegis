@@ -1,5 +1,5 @@
-import ComingSoon from "@/components/ui/ComingSoon";
+import AssetsView from "@/components/assets/AssetsView";
 
 export default function AssetsPage() {
-  return <ComingSoon title="Ativos" description="Domínios monitorados e o último resultado de cada um." />;
+  return <AssetsView />;
 }

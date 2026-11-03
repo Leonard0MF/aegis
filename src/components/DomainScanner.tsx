@@ -19,7 +19,7 @@ export default function DomainScanner({ onScan, isLoading, initialValue = "" }: 
   };
 
   return (
-    <form onSubmit={handleSubmit} className="relative w-full">
+    <form onSubmit={handleSubmit} autoComplete="off" className="relative w-full">
       <div className="relative flex items-center gap-2 rounded-xl border border-line bg-panel/90 pl-3 pr-1.5 py-1.5 transition-colors focus-within:border-accent/50 focus-within:ring-4 focus-within:ring-accent/10 overflow-hidden">
         <Search size={16} className="text-dim shrink-0" />
         <input
