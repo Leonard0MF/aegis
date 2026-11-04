@@ -57,6 +57,12 @@ export interface DnsInfo {
   dmarc: string | null;
   mx: string[];
   caa: string[];
+  /** DMARC herdado do domínio organizacional (RFC 7489 §6.6.3) */
+  dmarcFrom?: string;
+  /** CAA herdado de um domínio pai (RFC 8659 §3) */
+  caaFrom?: string;
+  /** plataforma que controla o DNS (ex.: vercel.app) */
+  platform?: string | null;
 }
 
 export interface EmailInfo {
@@ -72,11 +78,15 @@ export interface EmailInfo {
     subdomainPolicy: string | null;
     pct: number;
     reporting: boolean;
+    /** registro veio do domínio organizacional; vale a política sp (ou p) */
+    inheritedFrom?: string;
   };
   dkim: string[];
   mtaSts: { record: boolean; mode: string | null };
   tlsRpt: boolean;
   dnssec: boolean | null;
+  /** DNS controlado por uma plataforma (ex.: vercel.app): SPF/DMARC fora do alcance do dono */
+  platform?: string | null;
 }
 
 export interface Technology {

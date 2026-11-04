@@ -97,17 +97,30 @@ export async function inspectEmail(domain: string, base: DnsInfo): Promise<Email
       subdomainPolicy: base.dmarc ? tag("sp") : null,
       pct: Number(tag("pct") ?? 100),
       reporting: !!tag("rua"),
+      inheritedFrom: base.dmarcFrom,
     },
     dkim,
     mtaSts: sts,
     tlsRpt: rpt,
     dnssec: sec,
+    platform: base.platform ?? null,
   };
 }
 
 export function emailChecks(e: EmailInfo, hasMx: boolean): SecurityCheck[] {
   const out: SecurityCheck[] = [];
   const { spf, dmarc } = e;
+
+  // Subdomínio de plataforma (app.vercel.app): o DNS é da plataforma, o dono não consegue publicar SPF/DMARC
+  if (e.platform && !hasMx && !spf.record && !dmarc.record) {
+    out.push(
+      check(
+        "spf", "email", "SPF e DMARC", 0, "info",
+        `Não se aplica: o DNS de *.${e.platform} é da plataforma. Num domínio próprio, publique "v=spf1 -all" e DMARC p=reject`,
+      ),
+    );
+    return out;
+  }
 
   // SPF
   if (!spf.record) {
@@ -126,16 +139,18 @@ export function emailChecks(e: EmailInfo, hasMx: boolean): SecurityCheck[] {
     out.push(check("spf", "email", "SPF", 5, "pass", `${spf.all} · ${spf.lookups}/10 consultas DNS`));
   }
 
-  // DMARC
+  // DMARC (herdado do domínio pai: o que vale é sp=, ou p= se não houver sp)
+  const effective = dmarc.inheritedFrom ? (dmarc.subdomainPolicy ?? dmarc.policy) : dmarc.policy;
+  const from = dmarc.inheritedFrom ? ` (herdado de ${dmarc.inheritedFrom})` : "";
   if (!dmarc.record) {
     out.push(check("dmarc", "email", "DMARC", 6, "fail", "Sem DMARC: e-mails falsificados com o seu domínio chegam à caixa de entrada"));
-  } else if (dmarc.policy === "none") {
-    out.push(check("dmarc", "email", "DMARC", 6, "warn", "p=none só monitora: não bloqueia nenhum e-mail falsificado"));
+  } else if (effective === "none") {
+    out.push(check("dmarc", "email", "DMARC", 6, "warn", `Política none${from} só monitora: não bloqueia nenhum e-mail falsificado`));
   } else if (dmarc.pct < 100) {
-    out.push(check("dmarc", "email", "DMARC", 6, "warn", `p=${dmarc.policy}, mas aplicado a só ${dmarc.pct}% das mensagens`));
+    out.push(check("dmarc", "email", "DMARC", 6, "warn", `${effective}${from}, mas aplicado a só ${dmarc.pct}% das mensagens`));
   } else {
     out.push(
-      check("dmarc", "email", "DMARC", 6, "pass", `p=${dmarc.policy}${dmarc.reporting ? " · relatórios ativos" : " · sem relatórios (rua)"}`),
+      check("dmarc", "email", "DMARC", 6, "pass", `${effective}${from}${dmarc.reporting ? " · relatórios ativos" : " · sem relatórios (rua)"}`),
     );
   }
 

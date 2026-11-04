@@ -149,20 +149,38 @@ function transportChecks(i: CheckInput): SecurityCheck[] {
   return out;
 }
 
+/**
+ * O que importa numa CSP é o controle de scripts. 'unsafe-inline' é ignorado pelos navegadores quando há
+ * nonce, hash ou 'strict-dynamic' (CSP nível 3). Em style-src, 'unsafe-inline' é risco baixo.
+ */
+function cspWeakness(csp: string): string | null {
+  const dirs = new Map<string, string[]>();
+  for (const part of csp.split(";")) {
+    const [name, ...vals] = part.trim().toLowerCase().split(/\s+/);
+    if (name && !dirs.has(name)) dirs.set(name, vals);
+  }
+  const script = dirs.get("script-src") ?? dirs.get("default-src");
+  if (!script) return "não restringe scripts (sem script-src nem default-src)";
+  const protectedInline = script.some((v) => /^'(nonce-|sha256-|sha384-|sha512-|strict-dynamic')/.test(v));
+  if (script.includes("'unsafe-inline'") && !protectedInline) return "permite scripts inline (unsafe-inline)";
+  if (script.includes("'unsafe-eval'")) return "permite eval (unsafe-eval)";
+  if (script.some((v) => v === "*" || v === "https:" || v === "http:" || v === "data:")) {
+    return "aceita scripts de qualquer origem";
+  }
+  return null;
+}
+
 function headerChecks(h: Headers | null): SecurityCheck[] {
   if (!h) return [];
   const out: SecurityCheck[] = [];
   const csp = h.get("content-security-policy");
+  const cspIssue = csp ? cspWeakness(csp) : null;
 
   out.push(
     check(
       "csp", "headers", "Content-Security-Policy", 10,
-      csp ? (/unsafe-inline|unsafe-eval/i.test(csp) ? "warn" : "pass") : "fail",
-      csp
-        ? /unsafe-inline|unsafe-eval/i.test(csp)
-          ? "Presente, mas permite unsafe-inline/unsafe-eval"
-          : "Política presente"
-        : "Header ausente",
+      csp ? (cspIssue ? "warn" : "pass") : "fail",
+      csp ? (cspIssue ? `Presente, mas ${cspIssue}` : "Política presente e restritiva para scripts") : "Header ausente",
     ),
   );
 
@@ -247,11 +265,14 @@ function cookieChecks(h: Headers | null): SecurityCheck[] {
 
 function dnsChecks(d: DnsInfo): SecurityCheck[] {
   return [
-    check(
-      "caa", "dns", "CAA", 2,
-      d.caa.length ? "pass" : "warn",
-      d.caa.length ? `CAs autorizadas: ${[...new Set(d.caa)].join(", ")}` : "Sem CAA: qualquer autoridade pode emitir certificado para o domínio",
-    ),
+    d.caa.length
+      ? check(
+          "caa", "dns", "CAA", 2, "pass",
+          `CAs autorizadas: ${[...new Set(d.caa)].join(", ")}${d.caaFrom ? ` (herdado de ${d.caaFrom})` : ""}`,
+        )
+      : d.platform
+        ? check("caa", "dns", "CAA", 0, "info", `Não se aplica: o DNS de *.${d.platform} é da plataforma`)
+        : check("caa", "dns", "CAA", 2, "warn", "Sem CAA: qualquer autoridade pode emitir certificado para o domínio"),
   ];
 }
 

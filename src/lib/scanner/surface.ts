@@ -1,4 +1,5 @@
 import dns from "node:dns/promises";
+import { registrable } from "./domain";
 import type { SecurityCheck, Subdomain, SurfaceInfo } from "@/types/scan";
 import { isPrivateIp } from "@/lib/validators";
 import { check } from "./checks";
@@ -84,14 +85,6 @@ async function fromHackerTarget(root: string): Promise<string[] | null> {
 }
 
 /* ---------------- análise de cada subdomínio ---------------- */
-
-/** Aproximação do domínio registrável (sem a Public Suffix List completa). */
-const SECOND_LEVEL = /\.(com|net|org|gov|edu|co|ac|gob|nom|ind|art|eng|adv|blog)\.[a-z]{2}$/i;
-function registrable(host: string): string {
-  const h = host.replace(/\.$/, "");
-  const labels = h.split(".");
-  return labels.slice(SECOND_LEVEL.test(h) ? -3 : -2).join(".");
-}
 
 /** O domínio registrável não existe (sem NS e sem SOA)? Então está livre para registro. */
 async function unregistered(host: string): Promise<boolean> {

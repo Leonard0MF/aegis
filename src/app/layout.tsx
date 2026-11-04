@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { connection } from "next/server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,11 +18,13 @@ export const metadata: Metadata = {
   description: "Scanner de segurança de domínios: TLS, headers, cookies e DNS",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // renderização por requisição: o Next precisa ler o nonce da CSP (src/proxy.ts) para aplicá-lo aos scripts
+  await connection();
   return (
     <html
       lang="pt-BR"
