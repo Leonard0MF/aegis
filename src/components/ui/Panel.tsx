@@ -5,6 +5,7 @@ interface PanelProps {
   subtitle?: ReactNode;
   actions?: ReactNode;
   className?: string;
+  id?: string;
   bodyClassName?: string;
   children: ReactNode;
 }
@@ -15,11 +16,13 @@ export default function Panel({
   subtitle,
   actions,
   className = "",
+  id,
   bodyClassName = "",
   children,
 }: PanelProps) {
   return (
     <section
+      id={id}
       className={`rounded-2xl border border-line bg-panel/90 shadow-[0_1px_0_0_rgba(255,255,255,0.03)_inset,0_12px_32px_-16px_rgba(0,0,0,0.6)] flex flex-col ${className}`}
     >
       {(title || actions) && (

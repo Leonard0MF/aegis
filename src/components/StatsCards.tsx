@@ -7,6 +7,8 @@ import type { ScanResult } from "@/types/scan";
 interface StatsCardsProps {
   data?: ScanResult;
   isLoading: boolean;
+  /** clique em "Problemas abertos": leva até a lista de verificações */
+  onOpenIssues?: () => void;
 }
 
 type Tone = "neutral" | "ok" | "warn" | "bad";
@@ -18,16 +20,21 @@ const TONE: Record<Tone, { text: string; icon: string }> = {
   bad: { text: "text-bad", icon: "text-bad bg-bad/10" },
 };
 
-export default function StatsCards({ data, isLoading }: StatsCardsProps) {
+export default function StatsCards({ data, isLoading, onOpenIssues }: StatsCardsProps) {
   const fails = data?.checks.filter((c) => c.status === "fail").length ?? 0;
   const warns = data?.checks.filter((c) => c.status === "warn").length ?? 0;
   const tls = data?.tls;
 
-  const stats: { title: string; value: string; unit?: string; sub: string; tone: Tone; icon: LucideIcon }[] = [
+  const canOpen = !!onOpenIssues && !!data && !isLoading && fails + warns > 0;
+
+  const stats: {
+    title: string; value: string; unit?: string; sub: string; tone: Tone; icon: LucideIcon; onClick?: () => void;
+  }[] = [
     {
       title: "Problemas abertos",
       value: data ? String(fails + warns) : "–",
-      sub: data ? `${fails} falhas · ${warns} atenção` : "Sem dados",
+      sub: data ? `${fails} falhas · ${warns} atenção${canOpen ? " · ver →" : ""}` : "Sem dados",
+      onClick: canOpen ? onOpenIssues : undefined,
       tone: !data ? "neutral" : fails > 0 ? "bad" : warns > 0 ? "warn" : "ok",
       icon: AlertTriangle,
     },
@@ -50,10 +57,17 @@ export default function StatsCards({ data, isLoading }: StatsCardsProps) {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-      {stats.map(({ title, value, unit, sub, tone, icon: Icon }, i) => (
-        <div
+      {stats.map(({ title, value, unit, sub, tone, icon: Icon, onClick }, i) => {
+        const Tag = onClick ? "button" : "div";
+        return (
+        <Tag
           key={title}
-          className={`rounded-2xl border border-line bg-panel/90 p-4 sm:p-5 flex gap-4 items-start min-w-0 ${i === 2 ? "col-span-2 md:col-span-1" : ""}`}
+          {...(onClick
+            ? { type: "button" as const, onClick, "aria-label": `${title}: ${value}. Ver problemas` }
+            : {})}
+          className={`rounded-2xl border border-line bg-panel/90 p-4 sm:p-5 flex gap-4 items-start min-w-0 text-left ${
+            i === 2 ? "col-span-2 md:col-span-1" : ""
+          } ${onClick ? "cursor-pointer transition-colors hover:border-line-strong hover:bg-panel-2/60 focus-visible:outline-2 focus-visible:outline-accent" : ""}`}
         >
           <span className={`hidden sm:inline-flex rounded-xl p-2.5 ${TONE[tone].icon}`}>
             <Icon size={18} strokeWidth={1.75} />
@@ -77,8 +91,9 @@ export default function StatsCards({ data, isLoading }: StatsCardsProps) {
               {isLoading ? "Escaneando…" : sub}
             </p>
           </div>
-        </div>
-      ))}
+        </Tag>
+        );
+      })}
     </div>
   );
 }

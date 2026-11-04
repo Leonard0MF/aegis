@@ -3,62 +3,115 @@ import type { GeoInfo, GeoLocation } from "@/types/scan";
 import { isPrivateIp } from "@/lib/validators";
 
 /**
- * Geolocalização via ipwho.is (HTTPS, sem chave). É "melhor esforço":
- * qualquer falha vira lista vazia e nunca derruba o scan.
- * Obs.: IPs anycast/CDN (Cloudflare, Google…) mostram o local registrado, não o datacenter que respondeu.
+ * Geolocalização por IP com uma cadeia de provedores HTTPS sem chave (ipwho.is → ipapi.co → freeipapi.com).
+ * Na Vercel os IPs de saída são compartilhados com muitos clientes e as cotas gratuitas estouram com
+ * frequência; por isso há fallback e as falhas ficam em cache só por pouco tempo.
+ * É "melhor esforço": qualquer falha vira lista vazia e nunca derruba o scan.
+ * Obs.: IPs anycast/CDN (Cloudflare, Vercel…) mostram o local registrado, não o datacenter que respondeu.
  */
-const ENDPOINT = "https://ipwho.is/";
-const FIELDS = "success,ip,latitude,longitude,city,region,country,country_code,connection";
 const TIMEOUT_MS = 4000;
 const TTL_MS = 6 * 60 * 60 * 1000;
+/** falhas (cota, timeout) expiram rápido: com o Fluid Compute a instância vive bastante */
+const FAIL_TTL_MS = 2 * 60 * 1000;
 const MAX_SERVERS = 6;
 const MAX_MAIL = 3;
+const UA = "AEGIS-Scanner/1.0";
 
 type Cached = { at: number; value: GeoLocation | null };
 const cache = new Map<string, Cached>();
 let originCache: Cached | null = null;
 
-interface IpWhoResponse {
-  success: boolean;
-  ip: string;
-  latitude: number;
-  longitude: number;
-  city?: string;
-  region?: string;
-  country?: string;
-  country_code?: string;
-  connection?: { asn?: number; org?: string; isp?: string };
+const fresh = (c: Cached | null | undefined): c is Cached =>
+  !!c && Date.now() - c.at < (c.value ? TTL_MS : FAIL_TTL_MS);
+
+type Raw = Record<string, unknown>;
+const str = (v: unknown) => (typeof v === "string" ? v : "");
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const asn = (v: unknown) => {
+  const n = typeof v === "number" ? v : Number(String(v ?? "").replace(/^AS/i, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+interface Provider {
+  name: string;
+  /** ip vazio = IP público de quem pergunta (o próprio servidor do AEGIS) */
+  url: (ip: string) => string;
+  parse: (d: Raw) => GeoLocation | string; // string = motivo da falha
 }
 
+const PROVIDERS: Provider[] = [
+  {
+    name: "ipwho.is",
+    url: (ip) => `https://ipwho.is/${ip}?fields=success,message,ip,latitude,longitude,city,region,country,country_code,connection`,
+    parse: (d) => {
+      if (d.success !== true) return str(d.message) || "success=false";
+      const conn = (d.connection ?? {}) as Raw;
+      const lat = num(d.latitude), lon = num(d.longitude);
+      if (lat === null || lon === null) return "sem coordenadas";
+      return {
+        ip: str(d.ip), lat, lon,
+        city: str(d.city), region: str(d.region), country: str(d.country), countryCode: str(d.country_code),
+        org: str(conn.org) || str(conn.isp), asn: asn(conn.asn),
+      };
+    },
+  },
+  {
+    name: "ipapi.co",
+    url: (ip) => (ip ? `https://ipapi.co/${ip}/json/` : "https://ipapi.co/json/"),
+    parse: (d) => {
+      if (d.error) return str(d.reason) || "error";
+      const lat = num(d.latitude), lon = num(d.longitude);
+      if (lat === null || lon === null) return "sem coordenadas";
+      return {
+        ip: str(d.ip), lat, lon,
+        city: str(d.city), region: str(d.region), country: str(d.country_name), countryCode: str(d.country_code),
+        org: str(d.org), asn: asn(d.asn),
+      };
+    },
+  },
+  {
+    name: "freeipapi.com",
+    url: (ip) => `https://freeipapi.com/api/json/${ip}`,
+    parse: (d) => {
+      const lat = num(d.latitude), lon = num(d.longitude);
+      if (lat === null || lon === null || (lat === 0 && lon === 0)) return "sem coordenadas";
+      return {
+        ip: str(d.ipAddress), lat, lon,
+        city: str(d.cityName).replace(/\s*\(.*\)$/, ""), region: str(d.regionName),
+        country: str(d.countryName), countryCode: str(d.countryCode),
+        org: str(d.asnOrganization), asn: asn(d.asn),
+      };
+    },
+  },
+];
+
 async function lookup(ip: string | ""): Promise<GeoLocation | null> {
-  try {
-    const res = await fetch(`${ENDPOINT}${ip}?fields=${FIELDS}`, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      cache: "no-store",
-      headers: { "User-Agent": "AEGIS-Scanner/1.0" },
-    });
-    if (!res.ok) return null;
-    const d = (await res.json()) as IpWhoResponse;
-    if (!d.success || typeof d.latitude !== "number") return null;
-    return {
-      ip: d.ip,
-      lat: d.latitude,
-      lon: d.longitude,
-      city: d.city ?? "",
-      region: d.region ?? "",
-      country: d.country ?? "",
-      countryCode: d.country_code ?? "",
-      org: d.connection?.org || d.connection?.isp || "",
-      asn: d.connection?.asn ?? null,
-    };
-  } catch {
-    return null;
+  const errors: string[] = [];
+  for (const p of PROVIDERS) {
+    try {
+      const res = await fetch(p.url(ip), {
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        cache: "no-store",
+        headers: { "User-Agent": UA, Accept: "application/json" },
+      });
+      if (!res.ok) {
+        errors.push(`${p.name}: HTTP ${res.status}`);
+        continue;
+      }
+      const out = p.parse((await res.json()) as Raw);
+      if (typeof out !== "string") return out;
+      errors.push(`${p.name}: ${out}`);
+    } catch (err) {
+      errors.push(`${p.name}: ${err instanceof Error ? err.name : "erro"}`);
+    }
   }
+  console.warn(`geo: sem localização para ${ip || "origem"} (${errors.join("; ")})`);
+  return null;
 }
 
 async function cachedLookup(ip: string): Promise<GeoLocation | null> {
   const hit = cache.get(ip);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
+  if (fresh(hit)) return hit.value;
   const value = await lookup(ip);
   cache.set(ip, { at: Date.now(), value });
   if (cache.size > 2000) cache.delete(cache.keys().next().value!);
@@ -73,7 +126,7 @@ async function locateMany(ips: string[], max: number): Promise<GeoLocation[]> {
 
 /** IP público do próprio servidor do AEGIS (origem dos scans). */
 async function locateOrigin(): Promise<GeoLocation | null> {
-  if (originCache && Date.now() - originCache.at < TTL_MS) return originCache.value;
+  if (fresh(originCache)) return originCache.value;
   const value = await lookup("");
   originCache = { at: Date.now(), value };
   return value;

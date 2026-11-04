@@ -8,7 +8,7 @@ import Panel from "@/components/ui/Panel";
 const KIND_META: Record<MarkerKind, { label: string; dot: string }> = {
   server: { label: "Servidor web", dot: "bg-accent" },
   mail: { label: "E-mail (MX)", dot: "bg-info" },
-  origin: { label: "Origem do scan", dot: "bg-warn" },
+  origin: { label: "Origem do scan (servidor do AEGIS)", dot: "bg-warn" },
 };
 
 export function Legend() {
@@ -28,13 +28,28 @@ export function Legend() {
   );
 }
 
+/** Redes anycast/CDN: o mesmo IP responde de vários datacenters; a cidade é só a sede registrada. */
+const ANYCAST = /\b(vercel|cloudflare|fastly|akamai|cloudfront|google|incapsula|imperva|sucuri|stackpath|bunny|edgecast|edgio|netlify)\b/i;
+export const isAnycast = (g: GeoLocation) => ANYCAST.test(g.org);
+
 function Location({ g, kind }: { g: GeoLocation; kind: MarkerKind }) {
   const place = [g.city, g.region !== g.city ? g.region : "", g.country].filter(Boolean).join(", ");
+  const anycast = kind !== "origin" && isAnycast(g);
   return (
     <li className="flex items-start gap-3 py-2.5 border-b border-line/60 last:border-0">
       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${KIND_META[kind].dot}`} />
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] text-fg">{place || "Local desconhecido"}</p>
+        <p className="text-[13px] text-fg">
+          {place || "Local desconhecido"}
+          {anycast && (
+            <span
+              className="ml-2 rounded-full bg-info/10 px-1.5 py-px text-[10px] text-info ring-1 ring-inset ring-info/20 align-middle"
+              title="Rede anycast/CDN: este IP é atendido de vários datacenters. A cidade mostrada é a sede registrada do provedor."
+            >
+              anycast
+            </span>
+          )}
+        </p>
         <p className="text-xs text-dim truncate" title={g.org}>
           {g.host ? `${g.host} · ` : ""}
           {g.org || "Provedor desconhecido"}

@@ -51,6 +51,22 @@ export default function Home() {
   const mapTimer = useRef<number | undefined>(undefined);
   const [surfaceRunning, setSurfaceRunning] = useState(false);
   const [surfaceError, setSurfaceError] = useState<string | null>(null);
+  const [issuesOnly, setIssuesOnly] = useState(false);
+  const [flashIssues, setFlashIssues] = useState(false);
+  const flashTimer = useRef<number | undefined>(undefined);
+
+  /** card "Problemas abertos": filtra a lista e rola até ela */
+  const openIssues = useCallback(() => {
+    setIssuesOnly(true);
+    const el = document.getElementById("verificacoes");
+    el?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+    setFlashIssues(true);
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlashIssues(false), 1400);
+  }, []);
   /** scan exibido agora: etapas em segundo plano só aplicam o resultado se ele ainda for o mesmo */
   const current = useRef<ScanResult | null>(null);
 
@@ -148,7 +164,13 @@ export default function Home() {
     };
   }, [mapState, closeMap]);
 
-  useEffect(() => () => window.clearTimeout(mapTimer.current), []);
+  useEffect(
+    () => () => {
+      window.clearTimeout(mapTimer.current);
+      window.clearTimeout(flashTimer.current);
+    },
+    [],
+  );
 
   const runScan = useCallback(async (domain: string, self = false) => {
     if (!domain) return;
@@ -269,55 +291,68 @@ export default function Home() {
               mapActive ? "opacity-0 pointer-events-none" : ""
             }`}
           >
-            <StatsCards data={scanResult ?? undefined} isLoading={loading} />
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-              <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Coluna esquerda: define a altura da linha */}
-                <div className="space-y-4 min-w-0">
-                  <SecurityScore
-                    score={scanResult?.score}
-                    grade={scanResult?.grade}
-                    capReason={scanResult?.capReason}
-                    isLoading={loading}
-                  />
-                  <TlsDetails data={scanResult ?? undefined} isLoading={loading} />
-                  <DnsDetails data={scanResult ?? undefined} isLoading={loading} />
-                </div>
-                {/* Coluna direita: no desktop acompanha a altura da esquerda e rola por dentro */}
-                <div className="relative min-w-0 md:min-h-[500px]">
-                  <SecurityStatus
-                    checks={scanResult?.checks}
-                    isLoading={loading}
-                    className="md:absolute md:inset-0"
-                  />
-                </div>
-              </div>
-              <div className="min-w-0">
-                <ServerMap
-                  data={scanResult ?? undefined}
-                  isLoading={loading}
-                  slotRef={slotRef}
-                  camera={camera}
-                  globeHidden={mapState !== "closed"}
-                />
-              </div>
-            </div>
+            <StatsCards data={scanResult ?? undefined} isLoading={loading} onOpenIssues={openIssues} />
 
-            {/* Análise aprofundada */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-              <div className="xl:col-span-2 space-y-4 min-w-0">
-                <VulnsPanel key={`v-${dataKey}`} data={scanResult ?? undefined} isLoading={loading} />
-                <SurfacePanel
-                  key={`s-${dataKey}`}
-                  data={loading ? undefined : scanResult ?? undefined}
-                  running={surfaceRunning}
-                  error={surfaceError}
-                  onRun={() => scanResult && void runSurface(scanResult)}
-                />
+            {/*
+              Duas colunas independentes no xl (assim o globo não deixa um vazio embaixo dele).
+              Abaixo do xl as colunas viram "contents" e os blocos seguem a ordem do mobile via order-*.
+            */}
+            <div className="flex flex-col gap-4 xl:grid xl:grid-cols-3 xl:items-start">
+              <div className="contents xl:block xl:col-span-2 xl:space-y-4 min-w-0">
+                <div className="order-1 xl:order-none grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Coluna esquerda: define a altura da linha */}
+                  <div className="space-y-4 min-w-0">
+                    <SecurityScore
+                      score={scanResult?.score}
+                      grade={scanResult?.grade}
+                      capReason={scanResult?.capReason}
+                      isLoading={loading}
+                    />
+                    <TlsDetails data={scanResult ?? undefined} isLoading={loading} />
+                    <DnsDetails data={scanResult ?? undefined} isLoading={loading} />
+                  </div>
+                  {/* Coluna direita: no desktop acompanha a altura da esquerda e rola por dentro */}
+                  <div className="relative min-w-0 md:min-h-[500px] scroll-mt-4">
+                    <SecurityStatus
+                      id="verificacoes"
+                      checks={scanResult?.checks}
+                      isLoading={loading}
+                      onlyIssues={issuesOnly}
+                      onOnlyIssuesChange={setIssuesOnly}
+                      className={`md:absolute md:inset-0 scroll-mt-4 transition-shadow duration-500 ${
+                        flashIssues ? "ring-2 ring-accent/60" : ""
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Análise aprofundada */}
+                <div className="order-3 xl:order-none space-y-4 min-w-0">
+                  <VulnsPanel key={`v-${dataKey}`} data={scanResult ?? undefined} isLoading={loading} />
+                  <SurfacePanel
+                    key={`s-${dataKey}`}
+                    data={loading ? undefined : scanResult ?? undefined}
+                    running={surfaceRunning}
+                    error={surfaceError}
+                    onRun={() => scanResult && void runSurface(scanResult)}
+                  />
+                </div>
               </div>
-              <div className="space-y-4 min-w-0">
-                <ActivePanel key={`a-${scanResult?.domain ?? ""}`} data={loading ? undefined : scanResult ?? undefined} onResult={applyActive} />
-                <ReputationPanel data={scanResult ?? undefined} isLoading={loading} />
+
+              <div className="contents xl:block xl:space-y-4 min-w-0">
+                <div className="order-2 xl:order-none min-w-0">
+                  <ServerMap
+                    data={scanResult ?? undefined}
+                    isLoading={loading}
+                    slotRef={slotRef}
+                    camera={camera}
+                    globeHidden={mapState !== "closed"}
+                  />
+                </div>
+                <div className="order-4 xl:order-none space-y-4 min-w-0">
+                  <ActivePanel key={`a-${scanResult?.domain ?? ""}`} data={loading ? undefined : scanResult ?? undefined} onResult={applyActive} />
+                  <ReputationPanel data={scanResult ?? undefined} isLoading={loading} />
+                </div>
               </div>
             </div>
           </div>

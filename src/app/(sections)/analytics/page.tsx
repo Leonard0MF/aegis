@@ -1,5 +1,5 @@
-import ComingSoon from "@/components/ui/ComingSoon";
+import AnalyticsView from "@/components/analytics/AnalyticsView";
 
 export default function AnalyticsPage() {
-  return <ComingSoon title="Análises" description="Evolução das pontuações e falhas mais comuns entre os scans." />;
+  return <AnalyticsView />;
 }
