@@ -2,7 +2,8 @@
 
 import type { ActiveInfo, ScanResult, SecurityCheck } from "@/types/scan";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Globe2, X } from "lucide-react";
+import Link from "next/link";
+import { FileText, Globe2, X } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import SecurityScore from "@/components/SecurityScore";
 import StatsCards from "@/components/StatsCards";
@@ -271,6 +272,17 @@ export default function Home() {
                   isLoading={loading}
                 />
               </div>
+              {scanResult && !loading && !mapActive && (
+                <Link
+                  href={`/report?d=${encodeURIComponent(scanResult.domain)}`}
+                  aria-label={`Relatório de ${scanResult.domain}`}
+                  title="Relatório (PDF)"
+                  className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-line bg-panel/90 px-3 sm:px-3.5 py-2.5 text-sm text-muted hover:text-fg hover:border-line-strong transition-colors whitespace-nowrap"
+                >
+                  <FileText size={16} />
+                  <span className="hidden sm:inline">Relatório</span>
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={mapActive ? closeMap : openMap}

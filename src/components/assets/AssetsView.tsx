@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, Boxes, ExternalLink, Gauge, RefreshCw, Search, ShieldAlert, Trash2 } from "lucide-react";
+import { AlertTriangle, Boxes, ExternalLink, FileText, Gauge, RefreshCw, Search, ShieldAlert, Trash2 } from "lucide-react";
 import DomainScanner from "@/components/DomainScanner";
 import Panel from "@/components/ui/Panel";
 import Sparkline from "@/components/assets/Sparkline";
@@ -156,6 +156,14 @@ function AssetRow({
             className="grid h-8 w-8 place-items-center rounded-lg text-dim hover:text-fg hover:bg-panel-2 transition-colors"
           >
             <ExternalLink size={15} />
+          </Link>
+          <Link
+            href={`/report?d=${encodeURIComponent(asset.domain)}`}
+            aria-label={`Relatório de ${asset.domain}`}
+            title="Relatório (PDF)"
+            className="grid h-8 w-8 place-items-center rounded-lg text-dim hover:text-fg hover:bg-panel-2 transition-colors"
+          >
+            <FileText size={15} />
           </Link>
           <IconButton label={`Remover ${asset.domain}`} onClick={onRemove} disabled={busy} danger>
             <Trash2 size={15} />

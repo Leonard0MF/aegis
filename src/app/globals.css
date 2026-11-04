@@ -86,3 +86,21 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Relatório (/report): folha A4 clara; na impressão só o papel aparece */
+@page {
+  size: A4;
+  margin: 14mm 16mm;
+}
+@media print {
+  html {
+    color-scheme: light;
+  }
+  body {
+    background: #fff !important;
+  }
+  .report-paper {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
