@@ -73,3 +73,39 @@ export function getLastScan(): ScanResult | null {
 export function getLatestFor(domain: string): ScanResult | null {
   return loadHistory().find((r) => r.domain === domain) ?? null;
 }
+
+export function clearHistory(): void {
+  if (typeof window === "undefined") return;
+  write([]);
+}
+
+/**
+ * Junta scans importados (JSON exportado) ao histórico atual, sem duplicar (domínio + data)
+ * e respeitando os mesmos limites. Retorna quantos scans válidos foram adicionados.
+ */
+export function importHistory(raw: string): { added: number; invalid: number } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Arquivo não é um JSON válido");
+  }
+  const list = Array.isArray(parsed) ? parsed : (parsed as { scans?: unknown })?.scans;
+  if (!Array.isArray(list)) throw new Error("Formato não reconhecido: esperado uma lista de scans");
+
+  const valid = list.filter(isScanResult);
+  const current = loadHistory();
+  const seen = new Set(current.map((r) => `${r.domain}@${r.scannedAt}`));
+  const fresh = valid.filter((r) => !seen.has(`${r.domain}@${r.scannedAt}`));
+
+  const merged = [...current, ...fresh].sort((a, b) => b.scannedAt.localeCompare(a.scannedAt));
+  const perDomain = new Map<string, number>();
+  const kept = merged.filter((r) => {
+    const n = (perDomain.get(r.domain) ?? 0) + 1;
+    perDomain.set(r.domain, n);
+    return n <= MAX_PER_DOMAIN;
+  });
+  write(kept.slice(0, MAX_TOTAL));
+  const keptKeys = new Set(kept.slice(0, MAX_TOTAL).map((r) => `${r.domain}@${r.scannedAt}`));
+  return { added: fresh.filter((r) => keptKeys.has(`${r.domain}@${r.scannedAt}`)).length, invalid: list.length - valid.length };
+}

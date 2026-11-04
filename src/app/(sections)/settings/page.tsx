@@ -1,5 +1,5 @@
-import ComingSoon from "@/components/ui/ComingSoon";
+import SettingsView from "@/components/settings/SettingsView";
 
 export default function SettingsPage() {
-  return <ComingSoon title="Configurações" description="Preferências do scanner e alvo padrão." />;
+  return <SettingsView />;
 }

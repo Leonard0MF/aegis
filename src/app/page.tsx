@@ -20,6 +20,7 @@ import ActivePanel from "@/components/deep/ActivePanel";
 import { scanDomain, scanSurface } from "@/lib/services/scanner";
 import { mergeChecks } from "@/lib/scoring";
 import { getLastScan, getLatestFor, saveScan } from "@/lib/storage/scanHistory";
+import { getSettings } from "@/lib/storage/settings";
 
 /** Alvo usado quando o AEGIS roda em localhost/IP e não há domínio próprio para se auto-diagnosticar. */
 const FALLBACK_TARGET = process.env.NEXT_PUBLIC_AEGIS_DEFAULT_TARGET || "github.com";
@@ -184,7 +185,8 @@ export default function Home() {
       setIsSelfScan(self);
       saveScan(result);
       setLoading(false);
-      void runSurface(result); // subdomínios demoram mais: chegam depois, sem travar o painel
+      // subdomínios demoram mais: chegam depois, sem travar o painel (desligável em Configurações)
+      if (getSettings().autoSurface) void runSurface(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no scan");
     } finally {
@@ -196,16 +198,18 @@ export default function Home() {
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
+    const settings = getSettings();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- preferência lida uma vez do storage
+    if (settings.issuesOnlyByDefault) setIssuesOnly(true);
     // /?d=dominio (vindo da página Ativos) abre o último scan salvo daquele domínio
     const wanted = new URLSearchParams(window.location.search).get("d");
     const last = (wanted && getLatestFor(wanted.toLowerCase())) || getLastScan();
     if (last) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- leitura única de storage externo
       show(last);
       return;
     }
     const self = selfDomain();
-    void runScan(self ?? FALLBACK_TARGET, self !== null);
+    void runScan(self ?? (settings.defaultTarget || FALLBACK_TARGET), self !== null);
   }, [runScan, show]);
 
   const mapActive = mapState === "opening" || mapState === "open"; // painel some / mapa em foco
