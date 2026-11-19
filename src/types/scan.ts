@@ -165,6 +165,8 @@ export interface ActiveInfo {
   scannedAt: string;
   ports: OpenPort[];
   portsTested: number;
+  /** varredura de portas pulada: o IP é de uma CDN/hospedagem compartilhada (nome do provedor) */
+  portsSkipped?: string;
   exposed: ExposedPath[];
   pathsTested: number;
 }

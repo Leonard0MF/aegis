@@ -101,10 +101,18 @@ export const PATHS: Probe[] = [
   { path: "/xmlrpc.php", label: "WordPress xmlrpc.php ativo (força bruta amplificada)", severity: "low", match: (r) => /XML-RPC server accepts POST requests only/i.test(r.body) },
 ];
 
-export async function runActive(domain: string, ip: string, base: "https" | "http"): Promise<ActiveInfo> {
+/** `skipPorts`: provedor da CDN/hospedagem compartilhada; nesse caso só os arquivos do site são testados. */
+export async function runActive(
+  domain: string,
+  ip: string,
+  base: "https" | "http",
+  skipPorts: string | null = null,
+): Promise<ActiveInfo> {
   if (isPrivateIp(ip)) throw new Error("private ip");
 
-  const portsP = Promise.all(PORTS.map(async (p) => ((await tcpOpen(ip, p.port)) ? p : null)));
+  const portsP = skipPorts
+    ? Promise.resolve([] as ((typeof PORTS)[number] | null)[])
+    : Promise.all(PORTS.map(async (p) => ((await tcpOpen(ip, p.port)) ? p : null)));
 
   const origin = `${base}://${domain}`;
   // página aleatória: se o servidor devolver 200 + listagem para tudo, a checagem de diretório é ignorada
@@ -137,7 +145,8 @@ export async function runActive(domain: string, ip: string, base: "https" | "htt
   return {
     scannedAt: new Date().toISOString(),
     ports,
-    portsTested: PORTS.length,
+    portsTested: skipPorts ? 0 : PORTS.length,
+    ...(skipPorts ? { portsSkipped: skipPorts } : {}),
     exposed,
     pathsTested: PATHS.length + 4,
   };
@@ -162,6 +171,16 @@ export function activeChecks(a: ActiveInfo): SecurityCheck[] {
       crit.length ? CAP.critical : high.length ? CAP.high : undefined,
     ),
   );
+
+  if (a.portsSkipped) {
+    out.push(
+      check(
+        "open-ports", "exposure", "Portas de serviços internos", 0, "info",
+        `Não testadas: o IP é da ${a.portsSkipped} (infraestrutura compartilhada, não do dono do domínio). Teste as portas do servidor de origem por dentro da sua rede`,
+      ),
+    );
+    return out;
+  }
 
   const dangerous = a.ports.filter((p) => p.risk === "critical" || p.risk === "high");
   const critPorts = a.ports.filter((p) => p.risk === "critical");

@@ -4,6 +4,7 @@ import type { RefObject } from "react";
 import type { GeoInfo, GeoLocation, ScanResult } from "@/types/scan";
 import Globe, { type GlobeCamera, type MarkerKind } from "@/components/globe/Globe";
 import Panel from "@/components/ui/Panel";
+import { ANYCAST } from "@/lib/infra";
 
 const KIND_META: Record<MarkerKind, { label: string; dot: string }> = {
   server: { label: "Servidor web", dot: "bg-accent" },
@@ -29,7 +30,6 @@ export function Legend() {
 }
 
 /** Redes anycast/CDN: o mesmo IP responde de vários datacenters; a cidade é só a sede registrada. */
-const ANYCAST = /\b(vercel|cloudflare|fastly|akamai|cloudfront|google|incapsula|imperva|sucuri|stackpath|bunny|edgecast|edgio|netlify)\b/i;
 export const isAnycast = (g: GeoLocation) => ANYCAST.test(g.org);
 
 function Location({ g, kind }: { g: GeoLocation; kind: MarkerKind }) {

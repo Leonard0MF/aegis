@@ -2,6 +2,7 @@ import { request } from "@/lib/scanner/http";
 import { activeChecks, runActive } from "@/lib/scanner/active";
 import { fail, readTarget } from "@/lib/scanner/target";
 import { checkOwnership } from "@/lib/scanner/verify";
+import { sharedInfra } from "@/lib/scanner/shared";
 
 export const maxDuration = 60;
 
@@ -21,7 +22,9 @@ export async function POST(req: Request) {
 
   const https = await request(new URL(`https://${domain}/`), { timeoutMs: 6000 });
   try {
-    const active = await runActive(domain, ips[0], https ? "https" : "http");
+    // IP de CDN/hospedagem compartilhada: a posse do domínio não autoriza varrer as portas desse IP
+    const shared = await sharedInfra(https?.headers ?? null, ips[0]);
+    const active = await runActive(domain, ips[0], https ? "https" : "http", shared);
     return Response.json({ active, checks: activeChecks(active), via: ownership.via });
   } catch (err) {
     console.error("active scan failed", err);

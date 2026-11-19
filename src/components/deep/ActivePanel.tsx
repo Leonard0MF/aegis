@@ -87,8 +87,15 @@ export default function ActivePanel({ data, onResult }: Props) {
           {a && (
             <div className="space-y-2.5">
               <p className="text-xs text-dim">
-                {new Date(a.scannedAt).toLocaleString("pt-BR")} · {a.portsTested} portas e {a.pathsTested} caminhos testados
+                {new Date(a.scannedAt).toLocaleString("pt-BR")} ·{" "}
+                {a.portsSkipped ? `${a.pathsTested} caminhos testados` : `${a.portsTested} portas e ${a.pathsTested} caminhos testados`}
               </p>
+              {a.portsSkipped && (
+                <p className="text-[11px] text-dim leading-relaxed">
+                  Portas não testadas: o domínio aponta para a <span className="text-muted">{a.portsSkipped}</span>, um IP compartilhado
+                  com outros clientes. Varrê-lo seria testar a infraestrutura de terceiros; teste o servidor de origem por dentro da sua rede.
+                </p>
+              )}
               {a.exposed.length === 0 && a.ports.filter((p) => p.risk !== "info" && p.risk !== "low").length === 0 ? (
                 <p className="text-sm text-ok">Nada sensível exposto.</p>
               ) : (
