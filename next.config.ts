@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import pkg from "./package.json";
 
 /** Headers de segurança em todas as respostas. A CSP (com nonce) vem de src/proxy.ts. */
 const securityHeaders = [
@@ -13,6 +14,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // versão exibida na Sidebar: fonte única no package.json
+  env: { NEXT_PUBLIC_APP_VERSION: pkg.version },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

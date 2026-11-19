@@ -25,6 +25,6 @@ export async function POST(req: Request) {
     return Response.json({ active, checks: activeChecks(active), via: ownership.via });
   } catch (err) {
     console.error("active scan failed", err);
-    return fail("Active scan failed", 500);
+    return fail("Falha nos testes ativos", 500);
   }
 }

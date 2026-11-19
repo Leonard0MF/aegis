@@ -45,7 +45,8 @@ export function buildAssets(history: ScanResult[]): Asset[] {
 export type SortKey = "worst" | "name" | "recent" | "cert";
 
 export function sortAssets(list: Asset[], key: SortKey): Asset[] {
-  const certDays = (a: Asset) => a.latest.tls?.daysRemaining ?? -Infinity; // sem HTTPS = pior
+  // data absoluta de vencimento (daysRemaining fica congelado no dia do scan); sem HTTPS = pior
+  const certDays = (a: Asset) => (a.latest.tls ? Date.parse(a.latest.tls.validTo) || -Infinity : -Infinity);
   const copy = [...list];
   switch (key) {
     case "worst":

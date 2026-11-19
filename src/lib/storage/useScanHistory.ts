@@ -2,30 +2,22 @@
 
 import { useSyncExternalStore } from "react";
 import type { ScanResult } from "@/types/scan";
-import { HISTORY_EVENT, parseHistory, readRaw } from "./scanHistory";
+import { HISTORY_EVENT, loadHistory } from "./scanHistory";
 
 const EMPTY: ScanResult[] = [];
-let cache: { raw: string; value: ScanResult[] } = { raw: "[]", value: EMPTY };
 
 function subscribe(onChange: () => void) {
   window.addEventListener(HISTORY_EVENT, onChange);
-  window.addEventListener("storage", onChange); // outras abas
+  window.addEventListener("storage", onChange); // outras abas (o snapshot já foi invalidado em scanHistory)
   return () => {
     window.removeEventListener(HISTORY_EVENT, onChange);
     window.removeEventListener("storage", onChange);
   };
 }
 
-/** snapshot estável: só reprocessa o JSON quando o conteúdo cru muda */
-function getSnapshot(): ScanResult[] {
-  const raw = readRaw();
-  if (raw !== cache.raw) cache = { raw, value: parseHistory(raw) };
-  return cache.value;
-}
-
 /** Histórico de scans (mais recente primeiro), reativo. Vazio no servidor. */
 export function useScanHistory(): ScanResult[] {
-  return useSyncExternalStore(subscribe, getSnapshot, () => EMPTY);
+  return useSyncExternalStore(subscribe, loadHistory, () => EMPTY);
 }
 
 /* ---- relógio por minuto, para "há X min" sem Date.now() na renderização ---- */

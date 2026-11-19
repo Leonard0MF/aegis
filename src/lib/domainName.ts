@@ -19,5 +19,14 @@ export function normalizeDomain(input: unknown): string | null {
   value = value.replace(/:\d+$/, "");                     // porta
   value = value.replace(/\.$/, "");                       // ponto final
 
+  // domínios com acento (IDN, ex.: "açaí.com.br") viram punycode ("xn--a-ia3a.com.br")
+  if (/[^\x00-\x7f]/.test(value)) {
+    try {
+      value = new URL(`http://${value}`).hostname;
+    } catch {
+      return null;
+    }
+  }
+
   return HOSTNAME_RE.test(value) ? value : null;
 }

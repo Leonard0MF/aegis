@@ -55,6 +55,31 @@ const SCRIPT_RULES: { re: RegExp; name: string; npm: string }[] = [
   { re: /swiper(?:@|\/)(\d+\.\d+\.\d+)/i, name: "Swiper", npm: "swiper" },
 ];
 
+/**
+ * Tags `<name ...>` do HTML com busca linear (indexOf). Regex como /<script[^>]+src=/ retrocede de forma
+ * quadrática em HTML malicioso sem ">" e travaria o event loop por segundos.
+ */
+function tags(html: string, name: string, max = 300): string[] {
+  const out: string[] = [];
+  const lower = html.toLowerCase();
+  const open = `<${name}`;
+  let i = 0;
+  while (out.length < max) {
+    i = lower.indexOf(open, i);
+    if (i === -1) break;
+    const next = lower[i + open.length];
+    const end = lower.indexOf(">", i);
+    if (end === -1) break;
+    if (next !== undefined && /[\s/>]/.test(next) && end - i <= 2048) out.push(html.slice(i, end + 1));
+    i = end + 1;
+  }
+  return out;
+}
+
+/** Valor de um atributo dentro de uma tag já isolada (no máximo 2 KB). */
+const attr = (tag: string, name: string) =>
+  new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, "i").exec(tag)?.[1];
+
 export interface DetectedTech extends Technology {
   /** pacote npm (bibliotecas JS) para consultar no OSV */
   npm?: string;
@@ -86,7 +111,8 @@ export function detectTech(h: Headers | null, html: string): DetectedTech[] {
     for (const r of HEADER_RULES) {
       const v = h.get(r.header);
       const m = v ? r.re.exec(v) : null;
-      if (m) add({ name: r.name, version: ver(m[1]), category: r.category, evidence: `header ${r.header}: ${v}` });
+      // OpenSSL usa letra na versão (1.0.2k) e o CPE do NVD também
+      if (m) add({ name: r.name, version: r.name === "OpenSSL" ? m[1] : ver(m[1]), category: r.category, evidence: `header ${r.header}: ${v}` });
     }
     for (const r of EDGE_RULES) if (r.test(h)) add({ name: r.name, category: r.category, evidence: "headers da resposta" });
     const cookies = h.getSetCookie().join(" ");
@@ -97,8 +123,8 @@ export function detectTech(h: Headers | null, html: string): DetectedTech[] {
   }
 
   if (html) {
-    const gen = /<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)["']/i.exec(html)?.[1]
-      ?? /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']generator["']/i.exec(html)?.[1];
+    const genTag = tags(html, "meta").find((t) => attr(t, "name")?.toLowerCase() === "generator");
+    const gen = genTag ? attr(genTag, "content") : undefined;
     if (gen) {
       const g = gen.trim();
       if (/wordpress/i.test(g)) add({ name: "WordPress", version: ver(g), category: "cms", evidence: `meta generator: ${g}` });
@@ -108,14 +134,17 @@ export function detectTech(h: Headers | null, html: string): DetectedTech[] {
       else add({ name: g.split(/\s/)[0], version: ver(g), category: "cms", evidence: `meta generator: ${g}` });
     }
     if (/\/wp-content\/|\/wp-includes\//i.test(html) && !found.has("WordPress")) {
-      const v = /wp-includes\/[^"']+\?ver=(\d+\.\d+(?:\.\d+)?)/i.exec(html)?.[1];
+      const v = /wp-includes\/[^"'\s?]{1,200}\?ver=(\d+\.\d+(?:\.\d+)?)/i.exec(html)?.[1];
       add({ name: "WordPress", version: v, category: "cms", evidence: "caminhos /wp-content/" });
     }
     if (/__NEXT_DATA__|\/_next\/static\//.test(html)) add({ name: "Next.js", category: "framework", evidence: "assets /_next/" });
     if (/\/_nuxt\//.test(html)) add({ name: "Nuxt", category: "framework", evidence: "assets /_nuxt/" });
     if (/cdn\.shopify\.com/i.test(html)) add({ name: "Shopify", category: "hosting", evidence: "assets cdn.shopify.com" });
 
-    const srcs = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => m[1]).slice(0, 80);
+    const srcs = tags(html, "script")
+      .map((t) => attr(t, "src"))
+      .filter((v): v is string => !!v)
+      .slice(0, 80);
     for (const src of srcs) {
       for (const r of SCRIPT_RULES) {
         const m = r.re.exec(src);

@@ -10,8 +10,11 @@ import { detectTech } from "./tech";
 import { inspectTls, probeTlsVersions } from "./tls";
 import { lookupVulns, vulnChecks } from "./vulns";
 
+/** Prazo total do scan: fica abaixo do maxDuration (60 s) da rota, com folga para montar a resposta */
+const SCAN_BUDGET_MS = 45_000;
+
 /** HTML lido da página inicial (para identificar tecnologias) */
-const MAX_HTML = 512 * 1024;
+const MAX_HTML = 256 * 1024;
 
 export class ScanError extends Error {
   constructor(message: string, readonly status: number) {
@@ -20,14 +23,15 @@ export class ScanError extends Error {
 }
 
 /** /.well-known/security.txt (RFC 9116): canal oficial para reportar falhas */
-async function hasSecurityTxt(domain: string): Promise<boolean> {
-  const r = await request(new URL(`https://${domain}/.well-known/security.txt`), { maxBody: 8192, timeoutMs: 5000 });
+async function hasSecurityTxt(domain: string, signal: AbortSignal): Promise<boolean> {
+  const r = await request(new URL(`https://${domain}/.well-known/security.txt`), { maxBody: 8192, timeoutMs: 5000, signal });
   return !!r && r.status === 200 && /^contact:/im.test(r.body) && !/<html/i.test(r.body);
 }
 
 /** Executa o scan completo. `ips` já devem ter sido validados como públicos. */
 export async function runScan(domain: string, ips: string[]): Promise<ScanResult> {
   const started = Date.now();
+  const signal = AbortSignal.timeout(SCAN_BUDGET_MS);
 
   // geolocalização dos IPs começa já; a dos MX depende do DNS
   const serversGeo = locateServers(ips);
@@ -38,24 +42,24 @@ export async function runScan(domain: string, ips: string[]): Promise<ScanResult
   const [tls, versions, httpsProbe, httpRedirect, dnsInfo, geo, email, reputation, securityTxt] = await Promise.all([
     inspectTls(ips[0], domain),
     probeTlsVersions(ips[0], domain),
-    fetchFollowing(`https://${domain}/`, MAX_HTML),
-    probeHttpRedirect(domain),
+    fetchFollowing(`https://${domain}/`, MAX_HTML, signal),
+    probeHttpRedirect(domain, signal),
     dnsP,
     geoP,
     emailP,
     inspectReputation(domain, ips[0]),
-    hasSecurityTxt(domain),
+    hasSecurityTxt(domain, signal),
   ]);
 
   // Sem HTTPS, avalia os headers que o HTTP devolver
-  const probe = httpsProbe ?? (await fetchFollowing(`http://${domain}/`, MAX_HTML));
+  const probe = httpsProbe ?? (await fetchFollowing(`http://${domain}/`, MAX_HTML, signal));
   if (!tls && !probe) {
-    throw new ScanError(`Host ${domain} did not respond`, 502);
+    throw new ScanError(`O host ${domain} não respondeu`, 502);
   }
   if (tls) tls.versions = versions;
 
   const techs = detectTech(probe?.headers ?? null, probe?.body ?? "");
-  const { vulns, totals: vulnTotals } = await lookupVulns(techs);
+  const { vulns, totals: vulnTotals, unavailable } = await lookupVulns(techs, signal);
 
   const overHttps = !!probe && probe.finalUrl.startsWith("https://");
   const checks = [
@@ -67,7 +71,7 @@ export async function runScan(domain: string, ips: string[]): Promise<ScanResult
       dns: dnsInfo,
     }),
     ...emailChecks(email, dnsInfo.mx.length > 0),
-    ...vulnChecks(vulns, vulnTotals, techs),
+    ...vulnChecks(vulns, vulnTotals, techs, unavailable),
     ...reputationChecks(reputation),
     check(
       "security-txt", "headers", "security.txt", 2,

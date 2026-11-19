@@ -4,6 +4,7 @@ import type { ActiveInfo, ExposedPath, OpenPort, SecurityCheck, Severity } from 
 import { isPrivateIp } from "@/lib/validators";
 import { check } from "./checks";
 import { request, type RawResponse } from "./http";
+import { pool } from "./pool";
 
 /**
  * Testes ATIVOS: só rodam depois da verificação de propriedade.
@@ -99,20 +100,6 @@ export const PATHS: Probe[] = [
   { path: "/wp-json/wp/v2/users", label: "WordPress lista usuários publicamente", severity: "medium", match: (r) => notHtml(r) && /^\[\s*\{"id":\d+,"name"/.test(r.body) },
   { path: "/xmlrpc.php", label: "WordPress xmlrpc.php ativo (força bruta amplificada)", severity: "low", match: (r) => /XML-RPC server accepts POST requests only/i.test(r.body) },
 ];
-
-async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let i = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(n, items.length) }, async () => {
-      while (i < items.length) {
-        const k = i++;
-        out[k] = await fn(items[k]);
-      }
-    }),
-  );
-  return out;
-}
 
 export async function runActive(domain: string, ip: string, base: "https" | "http"): Promise<ActiveInfo> {
   if (isPrivateIp(ip)) throw new Error("private ip");

@@ -62,7 +62,7 @@ export default function Sidebar({ className = "" }: { className?: string }) {
         })}
       </nav>
 
-      <div className="mt-auto hidden lg:block px-2 text-[11px] text-dim">v1.0.4</div>
+      <div className="mt-auto hidden lg:block px-2 text-[11px] text-dim">v{process.env.NEXT_PUBLIC_APP_VERSION}</div>
     </aside>
   );
 }

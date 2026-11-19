@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Download, RotateCcw, Trash2, Upload } from "lucide-react";
 import Panel from "@/components/ui/Panel";
 import { normalizeDomain } from "@/lib/domainName";
-import { clearHistory, importHistory, readRaw } from "@/lib/storage/scanHistory";
+import { clearHistory, importHistory, lastWriteStatus, readRaw } from "@/lib/storage/scanHistory";
 import { useScanHistory } from "@/lib/storage/useScanHistory";
 import { resetSettings, updateSettings, useSettings } from "@/lib/storage/settings";
 
@@ -41,6 +41,12 @@ function Preferences() {
   const s = useSettings();
   const [target, setTarget] = useState(s.defaultTarget);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  // a hidratação usa o snapshot do servidor (vazio): quando o valor salvo chega, o campo acompanha
+  const [synced, setSynced] = useState(s.defaultTarget);
+  if (synced !== s.defaultTarget) {
+    setSynced(s.defaultTarget);
+    setTarget(s.defaultTarget);
+  }
 
   const saveTarget = () => {
     const v = target.trim();
@@ -99,7 +105,9 @@ function HistoryData() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [confirm, setConfirm] = useState(false);
-  const bytes = new Blob([readRaw()]).size;
+  // history muda de identidade só quando o conteúdo muda: o Blob de vários MB não é refeito a cada render
+  const bytes = useMemo(() => (history.length ? new Blob([readRaw()]).size : 0), [history]);
+  const write = lastWriteStatus();
   const domains = new Set(history.map((r) => r.domain)).size;
 
   const exportJson = () => {
@@ -111,7 +119,8 @@ function HistoryData() {
     a.href = url;
     a.download = `aegis-historico-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    // revogar na hora cancela o download em alguns navegadores (Safari/Firefox)
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
   };
 
   const onFile = async (file: File | undefined) => {
@@ -141,7 +150,19 @@ function HistoryData() {
           </div>
         ))}
       </div>
-      <p className="mt-2 text-xs text-dim">Até 10 scans por domínio e 200 no total; os mais antigos saem primeiro.</p>
+      <p className="mt-2 text-xs text-dim">
+        Até 10 scans por domínio e 200 no total; os mais antigos saem primeiro e só o último de cada domínio guarda CVEs,
+        subdomínios e mapa completos.
+      </p>
+      {!write.ok ? (
+        <p role="alert" className="mt-1.5 text-xs text-bad">
+          O navegador recusou gravar o histórico (modo privado ou armazenamento bloqueado): os scans desta aba não serão mantidos.
+        </p>
+      ) : write.dropped > 0 ? (
+        <p role="status" className="mt-1.5 text-xs text-warn">
+          Armazenamento do navegador cheio: {write.dropped} scan(s) mais antigo(s) foram removidos para salvar o último.
+        </p>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button type="button" onClick={exportJson} disabled={!history.length} className={BTN}>

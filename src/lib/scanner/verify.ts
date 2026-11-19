@@ -20,7 +20,11 @@ export function tokenFor(domain: string): string | null {
   return createHmac("sha256", s).update(`aegis-verify:${domain.toLowerCase()}`).digest("hex").slice(0, 32);
 }
 
-const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+/** compara em tempo constante; o tamanho é medido em bytes (texto com acento não pode lançar RangeError) */
+const same = (a: string, b: string) => {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+};
 
 /** example.com, depois os pais (verificar a raiz cobre os subdomínios). */
 function candidates(domain: string): string[] {
@@ -69,6 +73,9 @@ export async function checkOwnership(domain: string, fresh = false): Promise<Ver
   }
 
   // só guarda sucesso: quem acabou de publicar o registro quer ver o resultado na hora
-  if (value.verified) memo.set(domain, { at: Date.now(), value });
+  if (value.verified) {
+    memo.set(domain, { at: Date.now(), value });
+    if (memo.size > 1000) memo.delete(memo.keys().next().value!);
+  }
   return value;
 }

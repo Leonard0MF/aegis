@@ -448,20 +448,20 @@ export default function Globe({
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      /* ---- terra (pontos em lote por opacidade) ---- */
+      /* ---- terra (pontos em lote por opacidade: uma projeção por ponto, um path por faixa) ---- */
       const dotR = Math.max(0.75, R / 300);
+      const buckets = Array.from({ length: ALPHA_BUCKETS }, () => new Path2D());
+      for (let i = 0; i < DOTS.length; i += 3) {
+        project(DOTS[i], DOTS[i + 1], DOTS[i + 2]);
+        if (pz <= 0) continue;
+        const path = buckets[Math.min(ALPHA_BUCKETS - 1, Math.ceil(pz * ALPHA_BUCKETS) - 1)];
+        const s = dotR * (0.75 + 0.45 * pz);
+        path.moveTo(px + s, py);
+        path.arc(px, py, s, 0, Math.PI * 2);
+      }
       for (let b = 0; b < ALPHA_BUCKETS; b++) {
-        const lo = b / ALPHA_BUCKETS, hi = (b + 1) / ALPHA_BUCKETS;
-        ctx.beginPath();
-        for (let i = 0; i < DOTS.length; i += 3) {
-          project(DOTS[i], DOTS[i + 1], DOTS[i + 2]);
-          if (pz <= lo || pz > hi) continue;
-          const s = dotR * (0.75 + 0.45 * pz);
-          ctx.moveTo(px + s, py);
-          ctx.arc(px, py, s, 0, Math.PI * 2);
-        }
-        ctx.fillStyle = `rgba(160,190,214,${(0.12 + 0.72 * ((lo + hi) / 2)).toFixed(3)})`;
-        ctx.fill();
+        ctx.fillStyle = `rgba(160,190,214,${(0.12 + 0.72 * ((b + 0.5) / ALPHA_BUCKETS)).toFixed(3)})`;
+        ctx.fill(buckets[b]);
       }
 
       /* ---- órbitas + satélites (giram no espaço, independentes da Terra) ---- */

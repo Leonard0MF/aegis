@@ -12,6 +12,6 @@ export async function POST(req: Request) {
   } catch (err) {
     if (err instanceof ScanError) return fail(err.message, err.status);
     console.error("scan failed", err);
-    return fail("Scan failed", 500);
+    return fail("Falha no scan", 500);
   }
 }

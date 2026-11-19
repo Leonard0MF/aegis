@@ -48,6 +48,8 @@ export interface RequestOptions {
   maxBody?: number;
   timeoutMs?: number;
   method?: "GET" | "HEAD";
+  /** cancela a requisição (prazo total do scan) */
+  signal?: AbortSignal;
 }
 
 export interface RawResponse {
@@ -63,6 +65,7 @@ export function request(url: URL, opts: RequestOptions = {}): Promise<RawRespons
   // IP literal não passa pelo lookup: valida aqui
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (net.isIP(host) && isPrivateIp(host)) return Promise.resolve(null);
+  if (opts.signal?.aborted) return Promise.resolve(null);
 
   const maxBody = opts.maxBody ?? 0;
   const mod = url.protocol === "https:" ? https : http;
@@ -72,6 +75,7 @@ export function request(url: URL, opts: RequestOptions = {}): Promise<RawRespons
       if (settled) return;
       settled = true;
       clearTimeout(hardStop);
+      opts.signal?.removeEventListener("abort", onAbort);
       resolve(v);
     };
     const req = mod.request(
@@ -85,7 +89,8 @@ export function request(url: URL, opts: RequestOptions = {}): Promise<RawRespons
       },
       (res) => {
         const base = { status: res.statusCode ?? 0, headers: toHeaders(res.headers) };
-        if (maxBody <= 0) {
+        const isRedirect = base.status >= 300 && base.status < 400 && res.headers.location;
+        if (maxBody <= 0 || isRedirect) {
           res.destroy(); // não precisamos do corpo
           return done({ ...base, body: "", head: Buffer.alloc(0) });
         }
@@ -113,19 +118,28 @@ export function request(url: URL, opts: RequestOptions = {}): Promise<RawRespons
       req.destroy();
       done(null);
     }, (opts.timeoutMs ?? TIMEOUT_MS) + 4000);
+    const onAbort = () => {
+      req.destroy();
+      done(null);
+    };
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
     req.once("timeout", () => req.destroy());
     req.once("error", () => done(null));
     req.end();
   });
 }
 
+/** Teto da cadeia inteira de redirects (cada salto sozinho pode levar até TIMEOUT_MS + 4 s). */
+const CHAIN_MS = 20_000;
+
 /** Segue redirects manualmente (cada salto passa pelo safeLookup). */
-export async function fetchFollowing(startUrl: string, maxBody = 0): Promise<HttpProbe | null> {
+export async function fetchFollowing(startUrl: string, maxBody = 0, signal?: AbortSignal): Promise<HttpProbe | null> {
   let url = new URL(startUrl);
   const redirects: string[] = [];
+  const chain = signal ? AbortSignal.any([signal, AbortSignal.timeout(CHAIN_MS)]) : AbortSignal.timeout(CHAIN_MS);
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const res = await request(url, { maxBody });
+    const res = await request(url, { maxBody, signal: chain });
     if (!res) return null;
 
     const location = res.headers.get("location");
@@ -150,8 +164,8 @@ export async function fetchFollowing(startUrl: string, maxBody = 0): Promise<Htt
 }
 
 /** http://domain termina (seguindo a cadeia) em HTTPS? null = porta 80 não respondeu. */
-export async function probeHttpRedirect(domain: string): Promise<boolean | null> {
-  const probe = await fetchFollowing(`http://${domain}/`);
+export async function probeHttpRedirect(domain: string, signal?: AbortSignal): Promise<boolean | null> {
+  const probe = await fetchFollowing(`http://${domain}/`, 0, signal);
   if (!probe) return null;
   return probe.finalUrl.startsWith("https://");
 }

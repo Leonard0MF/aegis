@@ -14,23 +14,23 @@ export async function readTarget(req: Request): Promise<Target> {
   try {
     body = await req.json();
   } catch {
-    return { error: fail("Invalid JSON body", 400) };
+    return { error: fail("Corpo da requisição não é um JSON válido", 400) };
   }
   return resolveTarget((body as { domain?: unknown } | null)?.domain);
 }
 
 export async function resolveTarget(raw: unknown): Promise<Target> {
   const domain = normalizeDomain(raw);
-  if (!domain) return { error: fail("Invalid domain", 400) };
+  if (!domain) return { error: fail("Domínio inválido", 400) };
 
   let addresses: { address: string }[];
   try {
     addresses = await dns.lookup(domain, { all: true });
   } catch {
-    return { error: fail(`Could not resolve domain: ${domain}`, 404) };
+    return { error: fail(`Não foi possível resolver o domínio ${domain}`, 404) };
   }
   if (addresses.length === 0 || addresses.some((a) => isPrivateIp(a.address))) {
-    return { error: fail("Target resolves to a private or reserved address", 400) };
+    return { error: fail("O domínio aponta para um endereço privado ou reservado", 400) };
   }
   // IPv4 primeiro: nem toda rede tem rota IPv6
   const ips = addresses

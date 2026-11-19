@@ -51,7 +51,8 @@ export default function Home() {
   const slotRef = useRef<HTMLDivElement>(null);
   const camera = useRef<GlobeCamera>(createCamera()); // rotação compartilhada: painel ↔ tela cheia
   const mapTimer = useRef<number | undefined>(undefined);
-  const [surfaceRunning, setSurfaceRunning] = useState(false);
+  /** scan cuja superfície está sendo mapeada (uma etapa de um scan antigo não mexe no indicador do atual) */
+  const [surfaceKey, setSurfaceKey] = useState<string | null>(null);
   const [surfaceError, setSurfaceError] = useState<string | null>(null);
   const [issuesOnly, setIssuesOnly] = useState(false);
   const [flashIssues, setFlashIssues] = useState(false);
@@ -92,7 +93,7 @@ export default function Home() {
   const runSurface = useCallback(
     async (r: ScanResult) => {
       const key = scanKey(r);
-      setSurfaceRunning(true);
+      setSurfaceKey(key);
       setSurfaceError(null);
       try {
         const { surface, checks } = await scanSurface(r.domain);
@@ -102,7 +103,7 @@ export default function Home() {
           setSurfaceError(err instanceof Error ? err.message : "Falha ao mapear a superfície");
         }
       } finally {
-        setSurfaceRunning(false);
+        setSurfaceKey((k) => (k === key ? null : k));
       }
     },
     [patch],
@@ -184,7 +185,6 @@ export default function Home() {
       show(result);
       setIsSelfScan(self);
       saveScan(result);
-      setLoading(false);
       // subdomínios demoram mais: chegam depois, sem travar o painel (desligável em Configurações)
       if (getSettings().autoSurface) void runSurface(result);
     } catch (err) {
@@ -348,7 +348,7 @@ export default function Home() {
                   <SurfacePanel
                     key={`s-${dataKey}`}
                     data={loading ? undefined : scanResult ?? undefined}
-                    running={surfaceRunning}
+                    running={!!scanResult && surfaceKey === scanKey(scanResult)}
                     error={surfaceError}
                     onRun={() => scanResult && void runSurface(scanResult)}
                   />

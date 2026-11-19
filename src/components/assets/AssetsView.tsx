@@ -11,6 +11,11 @@ import { type Asset, type SortKey, buildAssets, scoreTier, sortAssets, timeAgo }
 import { scanDomain } from "@/lib/services/scanner";
 import { removeDomain, saveScan } from "@/lib/storage/scanHistory";
 import { useNowMinute, useScanHistory } from "@/lib/storage/useScanHistory";
+import { certDaysLeft } from "@/lib/analytics";
+
+/** dias até o vencimento contados a partir de agora (0 no servidor: usa o valor do dia do scan) */
+const daysLeft = (a: Asset, nowMinute: number) =>
+  a.latest.tls ? (nowMinute ? certDaysLeft(a.latest, nowMinute * 60_000) : a.latest.tls.daysRemaining) : -Infinity;
 
 const SORT_LABEL: Record<SortKey, string> = {
   worst: "Piores primeiro",
@@ -25,17 +30,18 @@ const TIER_BADGE = {
   bad: "bg-bad/10 text-bad ring-bad/25",
 };
 
-function certInfo(a: Asset): { text: string; tone: string } {
+function certInfo(a: Asset, nowMinute: number): { text: string; tone: string } {
   const tls = a.latest.tls;
   if (!tls) return { text: "Sem HTTPS", tone: "text-bad" };
-  if (!tls.valid && tls.daysRemaining >= 0) return { text: "Inválido", tone: "text-bad" };
-  if (tls.daysRemaining < 0) return { text: "Expirado", tone: "text-bad" };
-  return { text: `${tls.daysRemaining} dias`, tone: tls.daysRemaining < 30 ? "text-warn" : "text-muted" };
+  const days = daysLeft(a, nowMinute);
+  if (days < 0) return { text: "Expirado", tone: "text-bad" };
+  if (!tls.valid) return { text: "Inválido", tone: "text-bad" };
+  return { text: `${days} dias`, tone: days < 30 ? "text-warn" : "text-muted" };
 }
 
-function needsCertAttention(a: Asset) {
+function needsCertAttention(a: Asset, nowMinute: number) {
   const tls = a.latest.tls;
-  return !tls || !tls.valid || tls.daysRemaining < 30;
+  return !tls || !tls.valid || daysLeft(a, nowMinute) < 30;
 }
 
 /* ---------------- resumo ---------------- */
@@ -79,7 +85,7 @@ function AssetRow({
   const { latest, previous } = asset;
   const t = scoreTier(latest.score);
   const delta = previous ? latest.score - previous.score : null;
-  const cert = certInfo(asset);
+  const cert = certInfo(asset, nowMinute);
   const server = latest.geo?.servers[0];
   const ago = timeAgo(latest.scannedAt, nowMinute);
 
@@ -231,9 +237,9 @@ export default function AssetsView() {
       n,
       avg,
       withFails: assets.filter((a) => a.fails > 0).length,
-      certAlerts: assets.filter(needsCertAttention).length,
+      certAlerts: assets.filter((a) => needsCertAttention(a, nowMinute)).length,
     };
-  }, [assets]);
+  }, [assets, nowMinute]);
 
   const setBusyFor = (domain: string, on: boolean) =>
     setBusy((prev) => {

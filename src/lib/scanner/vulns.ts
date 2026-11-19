@@ -7,13 +7,36 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_PER_TECH = 15;
 const memo = new Map<string, { at: number; value: Vulnerability[] }>();
 
-async function cached(key: string, load: () => Promise<Vulnerability[] | null>): Promise<Vulnerability[]> {
+/** null = consulta falhou (rede, cota, prazo do scan): não é o mesmo que "nenhuma CVE" */
+async function cached(key: string, load: () => Promise<Vulnerability[] | null>): Promise<Vulnerability[] | null> {
   const hit = memo.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
   const value = await load();
-  if (value) memo.set(key, { at: Date.now(), value }); // erro de rede não entra no cache
-  return value ?? [];
+  if (value) {
+    memo.set(key, { at: Date.now(), value }); // erro de rede não entra no cache
+    if (memo.size > 1000) memo.delete(memo.keys().next().value!);
+  }
+  return value;
 }
+
+/** espera `ms`; false se o sinal abortar antes */
+function sleep(ms: number, signal?: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve(false);
+    const onAbort = () => {
+      clearTimeout(t);
+      resolve(false);
+    };
+    const t = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve(true);
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+const withTimeout = (ms: number, signal?: AbortSignal) =>
+  signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms);
 
 export function severityOf(score: number | undefined, label?: string): Severity {
   if (score !== undefined) return score >= 9 ? "critical" : score >= 7 ? "high" : score >= 4 ? "medium" : "low";
@@ -56,13 +79,13 @@ function osvFixed(v: OsvVuln, version: string): string | undefined {
   return undefined;
 }
 
-async function queryOsv(t: DetectedTech): Promise<Vulnerability[] | null> {
+async function queryOsv(t: DetectedTech, signal?: AbortSignal): Promise<Vulnerability[] | null> {
   try {
     const r = await fetch("https://api.osv.dev/v1/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ package: { name: t.npm, ecosystem: "npm" }, version: t.version }),
-      signal: AbortSignal.timeout(8000),
+      signal: withTimeout(8000, signal),
     });
     if (!r.ok) return null;
     const j = (await r.json()) as { vulns?: OsvVuln[] };
@@ -99,61 +122,76 @@ interface NvdItem {
   };
 }
 
-// sem chave, o NVD aceita ~5 requisições a cada 30 s: serializa as chamadas
-let nvdChain: Promise<unknown> = Promise.resolve();
+/*
+ * Sem chave o NVD aceita ~5 requisições a cada 30 s (com chave, 50). Cada chamada reserva um horário
+ * espaçado; se a fila passar de NVD_MAX_WAIT_MS (vários scans ao mesmo tempo), desiste e a tecnologia
+ * aparece como "não consultada", em vez de prender o scan além do maxDuration.
+ */
+const NVD_GAP_MS = process.env.NVD_API_KEY ? 700 : 6500;
+const NVD_MAX_WAIT_MS = 15_000;
+let nvdNext = 0;
 
-async function queryNvd(t: DetectedTech): Promise<Vulnerability[] | null> {
-  const run = async (): Promise<Vulnerability[] | null> => {
-    const cpe = `cpe:2.3:a:${t.cpe}:${t.version}:*:*:*:*:*:*:*`;
-    const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?virtualMatchString=${encodeURIComponent(cpe)}&resultsPerPage=500&noRejected`;
-    try {
-      const headers: Record<string, string> = {};
-      if (process.env.NVD_API_KEY) headers.apiKey = process.env.NVD_API_KEY;
-      const r = await fetch(url, { headers, signal: AbortSignal.timeout(20000) });
-      if (!r.ok) return null;
-      const j = (await r.json()) as { vulnerabilities?: NvdItem[] };
-      return (j.vulnerabilities ?? []).map(({ cve }) => {
-        const m = cve.metrics;
-        const metric = m?.cvssMetricV31?.[0] ?? m?.cvssMetricV30?.[0] ?? m?.cvssMetricV40?.[0] ?? m?.cvssMetricV2?.[0];
-        const score = metric?.cvssData.baseScore;
-        return {
-          id: cve.id,
-          aliases: [],
-          summary: (cve.descriptions.find((d) => d.lang === "en")?.value ?? "").replace(/\s+/g, " ").slice(0, 220),
-          severity: severityOf(score),
-          cvss: score,
-          affects: `${t.name} ${t.version}`,
-          kev: false,
-          url: `https://nvd.nist.gov/vuln/detail/${cve.id}`,
-        };
-      });
-    } catch {
-      return null;
-    }
-  };
-  const p = nvdChain.then(run, run);
-  nvdChain = p.catch(() => undefined);
-  return p;
+async function queryNvd(t: DetectedTech, signal?: AbortSignal): Promise<Vulnerability[] | null> {
+  const now = Date.now();
+  const at = Math.max(now, nvdNext);
+  if (at - now > NVD_MAX_WAIT_MS) return null;
+  nvdNext = at + NVD_GAP_MS;
+  if (!(await sleep(at - now, signal))) return null;
+
+  const cpe = `cpe:2.3:a:${t.cpe}:${t.version}:*:*:*:*:*:*:*`;
+  const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?virtualMatchString=${encodeURIComponent(cpe)}&resultsPerPage=500&noRejected`;
+  try {
+    const headers: Record<string, string> = {};
+    if (process.env.NVD_API_KEY) headers.apiKey = process.env.NVD_API_KEY;
+    const r = await fetch(url, { headers, signal: withTimeout(12000, signal) });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { vulnerabilities?: NvdItem[] };
+    return (j.vulnerabilities ?? []).map(({ cve }) => {
+      const m = cve.metrics;
+      const metric = m?.cvssMetricV31?.[0] ?? m?.cvssMetricV30?.[0] ?? m?.cvssMetricV40?.[0] ?? m?.cvssMetricV2?.[0];
+      const score = metric?.cvssData.baseScore;
+      return {
+        id: cve.id,
+        aliases: [],
+        summary: (cve.descriptions.find((d) => d.lang === "en")?.value ?? "").replace(/\s+/g, " ").slice(0, 220),
+        severity: severityOf(score),
+        cvss: score,
+        affects: `${t.name} ${t.version}`,
+        kev: false,
+        url: `https://nvd.nist.gov/vuln/detail/${cve.id}`,
+      };
+    });
+  } catch {
+    return null;
+  }
 }
 
 /* ---------------- agregação ---------------- */
 
 const RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
-export async function lookupVulns(techs: DetectedTech[]): Promise<{ vulns: Vulnerability[]; totals: VulnTotals }> {
+export async function lookupVulns(
+  techs: DetectedTech[],
+  signal?: AbortSignal,
+): Promise<{ vulns: Vulnerability[]; totals: VulnTotals; unavailable: string[] }> {
   const targets = techs.filter((t) => t.version && (t.npm || t.cpe)).slice(0, 8);
   const [kev, ...lists] = await Promise.all([
     getKev(),
     ...targets.map((t) =>
       t.npm
-        ? cached(`npm:${t.npm}@${t.version}`, () => queryOsv(t))
-        : cached(`cpe:${t.cpe}:${t.version}`, () => queryNvd(t)),
+        ? cached(`npm:${t.npm}@${t.version}`, () => queryOsv(t, signal))
+        : cached(`cpe:${t.cpe}:${t.version}`, () => queryNvd(t, signal)),
     ),
   ]);
 
   const out: Vulnerability[] = [];
   const totals: VulnTotals = { total: 0, kev: 0, critical: 0, high: 0, medium: 0, low: 0 };
-  for (const list of lists) {
+  const unavailable: string[] = [];
+  for (const [i, list] of lists.entries()) {
+    if (!list) {
+      unavailable.push(`${targets[i].name} ${targets[i].version}`);
+      continue;
+    }
     const marked = list.map((v) => ({
       ...v,
       kev: !!kev && [v.id, ...v.aliases].some((id) => kev.byId.has(id)),
@@ -166,10 +204,15 @@ export async function lookupVulns(techs: DetectedTech[]): Promise<{ vulns: Vulne
     marked.sort((a, b) => Number(b.kev) - Number(a.kev) || RANK[a.severity] - RANK[b.severity] || (b.cvss ?? 0) - (a.cvss ?? 0));
     out.push(...marked.slice(0, MAX_PER_TECH));
   }
-  return { vulns: out, totals };
+  return { vulns: out, totals, unavailable };
 }
 
-export function vulnChecks(vulns: Vulnerability[], totals: VulnTotals, techs: DetectedTech[]): SecurityCheck[] {
+export function vulnChecks(
+  vulns: Vulnerability[],
+  totals: VulnTotals,
+  techs: DetectedTech[],
+  unavailable: string[] = [],
+): SecurityCheck[] {
   const versioned = techs.filter((t) => t.version && (t.npm || t.cpe));
   if (versioned.length === 0) {
     return [
@@ -181,11 +224,21 @@ export function vulnChecks(vulns: Vulnerability[], totals: VulnTotals, techs: De
       ),
     ];
   }
+  const missing = unavailable.length ? ` · não consultado (bancos de CVE indisponíveis): ${unavailable.join(", ")}` : "";
+  if (vulns.length === 0 && unavailable.length === versioned.length) {
+    return [
+      check(
+        "vulns", "vulns", "Vulnerabilidades conhecidas (CVE)", 0, "info",
+        `Bancos de CVE indisponíveis para ${unavailable.join(", ")}. Escaneie de novo em alguns minutos`,
+      ),
+    ];
+  }
   if (vulns.length === 0) {
+    const checked = versioned.map((t) => `${t.name} ${t.version}`).filter((n) => !unavailable.includes(n));
     return [
       check(
         "vulns", "vulns", "Vulnerabilidades conhecidas (CVE)", 10, "pass",
-        `Nenhuma CVE para ${versioned.map((t) => `${t.name} ${t.version}`).join(", ")}`,
+        `Nenhuma CVE para ${checked.join(", ")}${missing}`,
       ),
     ];
   }
@@ -199,7 +252,7 @@ export function vulnChecks(vulns: Vulnerability[], totals: VulnTotals, techs: De
     out.push(
       check(
         "vulns-kev", "vulns", "CVE explorada ativamente (CISA KEV)", 15, "fail",
-        `${kev.map((v) => v.id).slice(0, 4).join(", ")} em ${[...new Set(kev.map((v) => v.affects))].join(", ")}${note}`,
+        `${[...new Set(kev.map((v) => v.id))].slice(0, 4).join(", ")} em ${[...new Set(kev.map((v) => v.affects))].join(", ")}${note}`,
         40,
       ),
     );
@@ -212,7 +265,7 @@ export function vulnChecks(vulns: Vulnerability[], totals: VulnTotals, techs: De
       "vulns", "vulns", "Vulnerabilidades conhecidas (CVE)", 10,
       crit || high ? "fail" : "warn",
       [crit && `${crit} crítica(s)`, high && `${high} alta(s)`, rest && `${rest} média(s)/baixa(s)`].filter(Boolean).join(" · ") +
-        ` em ${[...new Set(vulns.map((v) => v.affects))].join(", ")}${note}`,
+        ` em ${[...new Set(vulns.map((v) => v.affects))].join(", ")}${note}${missing}`,
       crit ? 59 : undefined,
     ),
   );

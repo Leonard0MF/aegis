@@ -4,6 +4,7 @@ import type { SecurityCheck, Subdomain, SurfaceInfo } from "@/types/scan";
 import { isPrivateIp } from "@/lib/validators";
 import { check } from "./checks";
 import { request } from "./http";
+import { pool } from "./pool";
 
 const MAX_ANALYZED = 60;
 const CONCURRENCY = 10;
@@ -39,6 +40,32 @@ const isNx = (e: unknown) => {
 
 /* ---------------- Certificate Transparency ---------------- */
 
+/** Teto do corpo das fontes: em domínios enormes (google.com) o crt.sh devolve centenas de MB de JSON. */
+const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
+
+/** Lê o corpo em stream; null se passar de `max` bytes (aí a fonte é descartada e as outras cobrem). */
+async function readCapped(r: Response, max = MAX_SOURCE_BYTES): Promise<string | null> {
+  if (Number(r.headers.get("content-length") ?? 0) > max) {
+    await r.body?.cancel();
+    return null;
+  }
+  const reader = r.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 const valid = (name: string, root: string) =>
   name.length < 254 && /^[a-z0-9.-]+$/.test(name) && (name === root || name.endsWith(`.${root}`));
 
@@ -48,7 +75,9 @@ async function fromCrtSh(root: string): Promise<string[] | null> {
       signal: AbortSignal.timeout(15000),
     });
     if (!r.ok) return null;
-    const rows = (await r.json()) as { name_value: string }[];
+    const text = await readCapped(r);
+    if (text === null) return null;
+    const rows = JSON.parse(text) as { name_value: string }[];
     return Array.isArray(rows) ? rows.flatMap((row) => row.name_value.split("\n")) : null;
   } catch {
     return null;
@@ -62,7 +91,9 @@ async function fromCertSpotter(root: string): Promise<string[] | null> {
       { signal: AbortSignal.timeout(12000) },
     );
     if (!r.ok) return null;
-    const rows = (await r.json()) as { dns_names: string[] }[];
+    const text = await readCapped(r);
+    if (text === null) return null;
+    const rows = JSON.parse(text) as { dns_names: string[] }[];
     return Array.isArray(rows) ? rows.flatMap((row) => row.dns_names) : null;
   } catch {
     return null;
@@ -76,8 +107,8 @@ async function fromHackerTarget(root: string): Promise<string[] | null> {
       signal: AbortSignal.timeout(10000),
     });
     if (!r.ok) return null;
-    const text = await r.text();
-    if (!text.includes(",")) return null; // "API count exceeded", "No records found"…
+    const text = await readCapped(r);
+    if (text === null || !text.includes(",")) return null; // "API count exceeded", "No records found"…
     return text.split("\n").map((line) => line.split(",")[0]);
   } catch {
     return null;
@@ -147,20 +178,6 @@ async function analyze(name: string): Promise<Subdomain> {
     }
   }
   return sub;
-}
-
-async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let i = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(n, items.length) }, async () => {
-      while (i < items.length) {
-        const k = i++;
-        out[k] = await fn(items[k]);
-      }
-    }),
-  );
-  return out;
 }
 
 /** Ordem de análise: nomes "interessantes" e CNAMEs suspeitos primeiro, depois os mais curtos. */

@@ -27,7 +27,8 @@ async function spfLookups(record: string, depth = 0, seen = new Set<string>()): 
     const inc = /^include:(.+)$/.exec(term)?.[1] ?? /^redirect=(.+)$/.exec(term)?.[1];
     if (inc) {
       count++;
-      if (!seen.has(inc)) {
+      // teto de nomes distintos: um SPF malicioso não consegue disparar centenas de consultas
+      if (!seen.has(inc) && seen.size < 20) {
         seen.add(inc);
         nested.push(inc);
       }
@@ -68,6 +69,12 @@ async function mtaSts(domain: string): Promise<EmailInfo["mtaSts"]> {
   return { record: true, mode };
 }
 
+/** pct= do DMARC; ausente ou inválido vale 100 (RFC 7489) */
+function pctOf(raw: string | null): number {
+  const n = Number(raw ?? 100);
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 100;
+}
+
 export async function inspectEmail(domain: string, base: DnsInfo): Promise<EmailInfo> {
   const spfRecord = base.spf;
   const allTerm = (spfRecord ?? "").split(/\s+/).find((t) => /^[+~?-]?all$/i.test(t));
@@ -95,7 +102,7 @@ export async function inspectEmail(domain: string, base: DnsInfo): Promise<Email
       record: base.dmarc,
       policy: base.dmarc ? tag("p") : null,
       subdomainPolicy: base.dmarc ? tag("sp") : null,
-      pct: Number(tag("pct") ?? 100),
+      pct: pctOf(tag("pct")),
       reporting: !!tag("rua"),
       inheritedFrom: base.dmarcFrom,
     },
