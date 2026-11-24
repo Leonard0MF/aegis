@@ -5,6 +5,13 @@ O AEGIS avalia a postura de segurança de um domínio: TLS, headers HTTP, cookie
 
 Não tem conta nem banco de dados. O histórico de scans fica no navegador (localStorage) e pode ser exportado e importado em JSON.
 
+- [Funcionalidades](#funcionalidades)
+- [Passivo por padrão, ativo só com autorização](#passivo-por-padrão-ativo-só-com-autorização)
+- [Rodando localmente](#rodando-localmente)
+- [Arquitetura](#arquitetura)
+- [Deploy na Vercel](#deploy-na-vercel)
+- [Limitações conhecidas](#limitações-conhecidas)
+
 ## Funcionalidades
 
 | Tela | O que faz |
@@ -35,8 +42,8 @@ Não tem conta nem banco de dados. O histórico de scans fica no navegador (loca
 ### Nota
 
 A nota é uma média ponderada das verificações: `pass` vale o peso cheio e `warn` vale metade.
-Achados graves **limitam** a nota, independentemente do resto. Exemplos: arquivo sensível exposto (máximo 20),
-CVE explorada ativamente (40), subdomain takeover (30), domínio em lista de bloqueio (30).
+Achados graves **limitam** a nota, independentemente do resto. Exemplos: arquivo sensível exposto
+(máximo 20 se crítico, 50 se de severidade alta), CVE explorada ativamente (40), subdomain takeover (30), domínio em lista de bloqueio (30).
 Faixas: A ≥ 90, B ≥ 80, C ≥ 65, D ≥ 50, F < 50.
 
 ## Passivo por padrão, ativo só com autorização
@@ -61,8 +68,13 @@ Requer Node.js 22 ou superior.
 
 ```bash
 npm install
-# crie o .env.local com as variáveis abaixo (ao menos AEGIS_SECRET para os testes ativos)
 npm run dev
+```
+
+Para os testes ativos, crie um `.env.local` com ao menos o `AEGIS_SECRET` (as outras variáveis estão [abaixo](#variáveis-de-ambiente)):
+
+```bash
+echo "AEGIS_SECRET=$(openssl rand -hex 32)" > .env.local
 ```
 
 Abra http://localhost:3000. Sem histórico, a Visão geral faz um auto-diagnóstico: no domínio onde o AEGIS está publicado ou,
@@ -109,10 +121,15 @@ src/
 ├── components/                  Telas e painéis
 ├── lib/
 │   ├── scanner/                 Lógica do scan (roda só no servidor)
+│   ├── services/scanner.ts      Cliente das rotas da API (navegador)
 │   ├── storage/                 Histórico e preferências no localStorage
 │   ├── scoring.ts               Cálculo da nota
 │   ├── analytics.ts             Séries, comparações e prazos
-│   └── remediation.ts           "Como corrigir" de cada verificação
+│   ├── assets.ts                Faixas da nota e tendência dos ativos
+│   ├── remediation.ts           "Como corrigir" de cada verificação
+│   ├── validators.ts            Normalização de domínio e bloqueio de IPs privados
+│   └── infra.ts                 Detecção de CDN/anycast e hospedagem compartilhada
+├── types/scan.ts                Tipos do resultado do scan
 └── proxy.ts                     CSP com nonce por requisição
 ```
 
